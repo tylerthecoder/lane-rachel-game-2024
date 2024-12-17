@@ -1,0 +1,147 @@
+#root {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #242424;
+  width: 100%;
+}
+
+.canvas-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: auto;
+}
+
+canvas {
+  display: block;
+  width: 800px;
+  height: 600px;
+}
+
+.home-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  background-color: #242424;
+  padding: 2rem;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.game-description {
+  max-width: 600px;
+  margin: 2rem 0;
+}
+
+.game-description ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.game-description li {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.start-button {
+  padding: 1rem 2rem;
+  font-size: 1.5rem;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.start-button:hover {
+  background-color: #45a049;
+}
+
+.end-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  background-color: #242424;
+  padding: 2rem;
+  color: rgba(255, 255, 255, 0.87);
+  font-family: 'Press Start 2P', cursive;
+}
+
+.end-screen h1 {
+  color: #4CAF50;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  margin-bottom: 2rem;
+  font-size: 2.5em;
+}
+
+.end-screen p {
+  font-size: 1.2em;
+  margin-bottom: 2rem;
+  color: #fff;
+}
+
+@keyframes rainbow {
+  0% { color: #ff0000; }
+  20% { color: #ffa500; }
+  40% { color: #ffff00; }
+  60% { color: #008000; }
+  80% { color: #0000ff; }
+  100% { color: #4b0082; }
+}
+
+.end-screen h1 {
+  animation: rainbow 5s infinite;
+}
