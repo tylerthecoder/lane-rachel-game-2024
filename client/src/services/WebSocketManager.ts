@@ -10,6 +10,7 @@ export class WebSocketManager {
     private connectionCallbacks: Set<ConnectionCallback> = new Set();
     private gameStateCallbacks: Set<GameStateCallback> = new Set();
     private gameStartCallbacks: Set<GameStartCallback> = new Set();
+    private subscribers: Map<string, Set<(data: any) => void>> = new Map();
 
     private constructor() {}
 
