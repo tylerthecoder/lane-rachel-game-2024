@@ -6,6 +6,7 @@ export type BuildingType =
   | 'house';
 
 export interface Building {
+  id: string;
   side: 'left' | 'right';
   y: number;
   width: number;

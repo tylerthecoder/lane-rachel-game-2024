@@ -1,57 +1,67 @@
 # Lane & Rachel's Tandem Bike Adventure
 
-A multiplayer game where two players control a tandem bike together and complete various missions around the city.
+A multiplayer game where 2-4 players control a bike together and compete in various minigames while navigating through a city.
 
 ## Game Overview
 
 ### Core Gameplay
-- Players control a tandem bike together in the middle of the screen
-- Both players control the same bike simultaneously, requiring coordination
-- The bike moves forward automatically through a city environment
-- Players must work together to steer and complete objectives
+- 2-4 players control a bike together in the middle of the screen ✅
+- Players must coordinate their movements to navigate the city ✅
+- The bike moves forward automatically through a city environment ✅
+- When hitting special buildings, one player enters a minigame while others continue riding
+- Points are earned by completing minigames
+- Lives are lost by hitting road obstacles
+- Game continues until all lives are lost
 
-### Game Objectives
-1. Get treats for Luna
-   - Find and visit pet stores
-   - Collect dog treats
+### Minigames
+1. Restaurant Memory Game
+   - Player is shown a grid of food emojis
+   - Memorize positions in limited time
+   - Match pairs to complete the game
+   - Points awarded based on speed and accuracy
 
-2. Capture 3 Pokemon
-   - Find Pokemon locations in the city
-   - Special Pokemon encounters with Luna and Miso
-   - Simple Pokemon-style catching mechanic
+2. Pokemon Encounter (TBD)
+   - Triggered when hitting Pokemon locations
+   - Special encounter mechanics to be determined
+   - Points awarded for successful catches
 
-3. Visit 3 Different Restaurants
-   - Each restaurant visit counts towards the goal
-   - Visiting the same restaurant twice will result in a loss
-   - Must strategically choose different restaurants
+3. Pet Store Challenge (TBD)
+   - Triggered when hitting pet stores
+   - Minigame mechanics to be determined
+   - Points awarded for completion
+
+4. Operation Emergency
+   - Triggered when hitting pedestrians
+   - Operation-style medical minigame
+   - Fix the patient's injuries
+   - Must complete to continue
 
 ## Technical Implementation
 
 ### Client (React + Canvas)
-- React application with Canvas-based rendering
-- Real-time game loop for smooth animations
-- Perspective rendering for buildings and road
-- Asset management for building images and sprites
-- Collision detection system
-- State management for game objectives
+- [x] React application with Canvas-based rendering
+- [x] Real-time game loop for smooth animations
+- [x] Perspective rendering for buildings and road
+- [x] Basic collision detection system
+- [x] Building placement and types
+- [ ] Minigame system integration
+- [ ] Points and lives tracking
+- [ ] Player state management
 
 ### Server (Express + WebSocket)
-- Express server handling WebSocket connections
-- Limited to exactly two players (Lane and Rachel)
-- Real-time state synchronization
-- Game state management
-  - Bike position and movement
-  - Building/Pokemon locations
-  - Traffic positions
-  - Objective progress
+- [ ] Express server with WebSocket support
+- [ ] Player name registration and management
+- [ ] Game state synchronization
+- [ ] Minigame state handling
+- [ ] Score tracking and persistence
 
 ### Game State
-- Bike position and speed
-- Building locations and types
-- Pokemon spawn points
-- Traffic positions and patterns
-- Objective completion status
-- Player connection status
+- [x] Bike position and movement
+- [x] Building locations and types
+- [ ] Player names and roles
+- [ ] Active minigame states
+- [ ] Points and lives tracking
+- [ ] Collision history
 
 ## Todo List
 
@@ -60,52 +70,88 @@ A multiplayer game where two players control a tandem bike together and complete
 - [x] Basic road and perspective rendering
 - [x] Simple bike movement controls
 - [x] Building placement system
-- [x] Add building types and images
+- [x] Building types and collision detection
 
-### Phase 2: Game UI and Start Screen (Current)
-- [ ] Create title screen with game logo
-- [ ] Add start game button and player connection status
-- [ ] Implement objectives display panel
-- [ ] Add score/progress tracking UI
-- [ ] Create end game screen (win/lose conditions)
+### Phase 2: Multiplayer Core
+- [ ] Set up WebSocket server
+- [ ] Implement player name registration
+- [ ] Add player connection display
+- [ ] Synchronize bike controls between players
+- [ ] Add waiting room for 2+ players
+- [ ] Add player count display
+- [x] Set up WebSocket server
+- [x] Implement player name registration
+- [x] Add player connection display
+- [x] Add waiting room for 2+ players
+- [x] Add player count display
 
-### Phase 3: Multiplayer Implementation
-- [ ] Set up Express server with WebSocket support
-- [ ] Implement player connection management
-- [ ] Add real-time bike position synchronization
-- [ ] Handle simultaneous control inputs from both players
-- [ ] Add player ready/start game synchronization
+### Phase 2.5: Game State Synchronization
+- [ ] Create shared GameState interface between client/server
+  - [ ] Bike position and velocity
+  - [ ] Building positions and types
+  - [ ] Player scores and status
+  - [ ] Active minigames state
+- [ ] Implement server-side game loop (30 fps)
+  - [ ] Physics calculations
+  - [ ] Collision detection
+  - [ ] Score updates
+- [ ] Create client-side state management
+  - [ ] Separate game logic from rendering
+  - [ ] Create state update handler
+  - [ ] Implement interpolation for smooth movement
+- [ ] Set up input handling
+  - [ ] Send player inputs to server
+  - [ ] Server validates and applies inputs
+  - [ ] Broadcast updated state to all clients
+- [ ] Add state synchronization monitoring
+  - [ ] Track latency
+  - [ ] Handle disconnections gracefully
+  - [ ] Implement state reconciliation
 
-### Phase 4: Game Mechanics
-- [ ] Implement collision detection system
-- [ ] Add traffic obstacles and movement patterns
-- [ ] Create Pokemon encounter system
-  - [ ] Pokemon spawn logic
-  - [ ] Catching mechanic
-  - [ ] Success/failure states
-- [ ] Add pet store interaction system
-  - [ ] Treat collection mechanic
-  - [ ] Inventory system
-- [ ] Restaurant visit tracking
-  - [ ] Restaurant type identification
-  - [ ] Visit history tracking
-  - [ ] Duplicate visit detection
+### Phase 3: Road and Obstacles
+- [ ] Add road obstacles (potholes, traffic)
+- [ ] Implement lives system
+- [ ] Add visual feedback for damage
+- [ ] Add pedestrian obstacles
+- [ ] Implement speed variations
+- [ ] Add score display
 
-### Phase 5: Polish and Assets
-- [ ] Add unique building images for each type
-- [ ] Create bike sprite and animations
-- [ ] Add particle effects for interactions
-- [ ] Implement sound effects and background music
-- [ ] Add visual feedback for objective completion
-- [ ] Create tutorial/instructions screen
+### Phase 4: Minigame System
+- [ ] Create minigame framework
+- [ ] Implement Restaurant Memory Game
+  - [ ] Emoji grid system
+  - [ ] Timer and scoring
+  - [ ] Victory/failure states
+- [ ] Add Operation Emergency Game
+  - [ ] Patient injury system
+  - [ ] Surgery controls
+  - [ ] Success conditions
+- [ ] Design and implement Pokemon minigame
+- [ ] Design and implement Pet Store minigame
 
-### Phase 6: Testing and Deployment
-- [ ] Implement error handling for lost connections
-- [ ] Add reconnection logic
+### Phase 5: Game Flow
+- [ ] Add game start conditions
+- [ ] Implement minigame transitions
+- [ ] Add spectator mode for players in minigames
+- [ ] Create scoring system
+- [ ] Add game over conditions
+- [ ] Implement high score system
+
+### Phase 6: Polish and Assets
+- [ ] Add unique building images
+- [ ] Create bike animations
+- [ ] Add sound effects
+- [ ] Implement background music
+- [ ] Add particle effects
+- [ ] Create tutorial screens
+
+### Phase 7: Testing and Deployment
 - [ ] Test multiplayer synchronization
-- [ ] Performance optimization
-- [ ] Deploy server to hosting platform
-- [ ] Set up client deployment
+- [ ] Implement error handling
+- [ ] Add reconnection logic
+- [ ] Optimize performance
+- [ ] Deploy server
+- [ ] Set up client hosting
 
 
 

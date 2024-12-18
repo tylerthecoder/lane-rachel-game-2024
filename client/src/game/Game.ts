@@ -34,6 +34,8 @@ export class Game {
     private buildingImageElements: Record<BuildingType, HTMLImageElement> = {} as Record<BuildingType, HTMLImageElement>;
     private showDebugHitboxes = false; // Toggle with 'H' key
     private onGoalsUpdate: (() => void) | null = null;
+    private collidedBuildingIds: Set<string> = new Set(); // Track by unique ID instead of distance
+    private nextBuildingId = 0; // For generating unique building IDs
 
     public goals: GameGoals = {
         treatsCollected: 0,
@@ -91,12 +93,16 @@ export class Game {
         const types: BuildingType[] = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'];
         this.buildings = [
             // Left side buildings
-            { side: 'left', y: 100, width: 100, height: 200, distance: 500, type: types[0] },
-            { side: 'left', y: 100, width: 150, height: 250, distance: 1000, type: types[1] },
+            { id: this.getNextBuildingId(), side: 'left', y: 100, width: 100, height: 200, distance: 500, type: types[0] },
+            { id: this.getNextBuildingId(), side: 'left', y: 100, width: 150, height: 250, distance: 1000, type: types[1] },
             // Right side buildings
-            { side: 'right', y: 100, width: 120, height: 180, distance: 700, type: types[2] },
-            { side: 'right', y: 100, width: 140, height: 220, distance: 1200, type: types[3] },
+            { id: this.getNextBuildingId(), side: 'right', y: 100, width: 120, height: 180, distance: 700, type: types[2] },
+            { id: this.getNextBuildingId(), side: 'right', y: 100, width: 140, height: 220, distance: 1200, type: types[3] },
         ];
+    }
+
+    private getNextBuildingId(): string {
+        return `building_${this.nextBuildingId++}`;
     }
 
     public start(canvas: HTMLCanvasElement) {
@@ -201,6 +207,7 @@ export class Game {
         // Reset building when it gets too close
         if (building.distance < 0) {
             building.distance = this.ROAD_LENGTH;
+            building.id = this.getNextBuildingId(); // Give it a new ID when recycling
             const types: BuildingType[] = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'];
             building.type = types[Math.floor(Math.random() * types.length)];
         }
@@ -316,8 +323,8 @@ export class Game {
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(x, y, width, height);
 
-        // Draw buffer zone
-        const buffer = 20;
+        // Draw buffer zone with smaller buffer
+        const buffer = 5; // Decreased from 10 to 5
         this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
         this.ctx.lineWidth = 1;
         this.ctx.strokeRect(
@@ -335,7 +342,12 @@ export class Game {
     }
 
     private checkCollisionWithBuilding(building: Building, buildingData: { position: { x: number, y: number }, dimensions: { width: number, height: number } }): boolean {
-        const buffer = 20;
+        // Don't collide if we've already hit this building
+        if (this.collidedBuildingIds.has(building.id)) {
+            return false;
+        }
+
+        const buffer = 5; // Decreased from 10 to 5
         const bikeHitbox = {
             x: this.bike.x - buffer,
             y: (this.bike.y - this.bike.height) - buffer,
@@ -358,6 +370,8 @@ export class Game {
         );
 
         if (collision) {
+            // Add to collided buildings when we hit it
+            this.collidedBuildingIds.add(building.id);
             console.log(`Collision with ${building.type} at distance ${Math.round(building.distance)}m`);
         }
 
@@ -432,5 +446,15 @@ export class Game {
         if (this.onGoalsUpdate) {
             this.onGoalsUpdate();
         }
+    }
+
+    private handlePlayAgain() {
+        this.collidedBuildingIds.clear();
+        this.goals.treatsCollected = 0;
+        this.goals.pokemonCaught = 0;
+        this.goals.restaurantsVisited.clear();
+        this.goals.isComplete = false;
+        this.nextBuildingId = 0; // Reset building IDs
+        this.buildings.forEach(building => building.id = this.getNextBuildingId()); // Give all buildings new IDs
     }
 }

@@ -1,0 +1,37 @@
+.connection-status {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 1000;
+    font-family: 'Press Start 2P', cursive;
+    transition: all 0.3s ease;
+}
+
+.connection-status.connected {
+    background-color: rgba(76, 175, 80, 0.2);
+    border: 1px solid #4CAF50;
+}
+
+.connection-status.connecting {
+    background-color: rgba(255, 193, 7, 0.2);
+    border: 1px solid #FFC107;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}

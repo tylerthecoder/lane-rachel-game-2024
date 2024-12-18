@@ -1,70 +1,105 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css'
 import { GameCanvas } from './components/GameCanvas'
 import { HomeScreen } from './components/HomeScreen'
+import { ConnectionScreen } from './components/ConnectionScreen'
+import { ConnectionStatus } from './components/ConnectionStatus'
 import { GoalsPanel } from './components/GoalsPanel'
-import { Game } from './game/Game'
+import { GameState, createInitialGameState } from '@shared/types/GameState'
+import { WebSocketManager } from './services/WebSocketManager';
 
 function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [showEndScreen, setShowEndScreen] = useState(false);
-  const [, forceUpdate] = useState({});
-  const game = useMemo(() => new Game(), []);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [gameState, setGameState] = useState<GameState>(createInitialGameState());
+  const wsManager = WebSocketManager.getInstance();
 
   useEffect(() => {
-    game.setGoalsUpdateCallback(() => {
-      forceUpdate({});
+    const unsubscribeGameState = wsManager.onGameState((newGameState) => {
+      setGameState(newGameState);
     });
-  }, [game]);
 
-  useEffect(() => {
-    const checkGameCompletion = () => {
-      if (game.goals.isComplete) {
-        setShowEndScreen(true);
-      }
+    const unsubscribeGameStart = wsManager.onGameStart(() => {
+      setIsGameStarted(true);
+      setIsConnecting(false);
+    });
+
+    return () => {
+      unsubscribeGameState();
+      unsubscribeGameStart();
     };
-
-    const interval = setInterval(checkGameCompletion, 1000);
-    return () => clearInterval(interval);
-  }, [game]);
+  }, []);
 
   const handleStartGame = () => {
-    setIsGameStarted(true);
+    setIsConnecting(true);
+    wsManager.connect();
+  };
+
+  const handleNameSubmit = (name: string) => {
+    wsManager.sendMessage({ type: 'connect', payload: name });
+  };
+
+  const handleGameStart = () => {
+    wsManager.sendMessage({ type: 'startGame' });
   };
 
   const handlePlayAgain = () => {
-    // Reset game state
-    game.goals.treatsCollected = 0;
-    game.goals.pokemonCaught = 0;
-    game.goals.restaurantsVisited.clear();
-    game.goals.isComplete = false;
+    setGameState(createInitialGameState());
     setShowEndScreen(false);
+    setIsGameStarted(false);
+    setIsConnecting(false);
+    wsManager.disconnect();
   };
+
+  useEffect(() => {
+    if (gameState.goals.isComplete) {
+      setShowEndScreen(true);
+    }
+  }, [gameState.goals.isComplete]);
 
   if (showEndScreen) {
     return (
-      <div className="end-screen">
-        <h1>Congratulations!</h1>
-        <p>You've completed all objectives!</p>
-        <button className="start-button" onClick={handlePlayAgain}>
-          Play Again
-        </button>
+      <div className="App">
+        <ConnectionStatus />
+        <div className="end-screen">
+          <h1>Congratulations!</h1>
+          <p>You've completed all objectives!</p>
+          <button className="start-button" onClick={handlePlayAgain}>
+            Play Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isConnecting) {
+    return (
+      <div className="App">
+        <ConnectionStatus />
+        <ConnectionScreen
+          onNameSubmit={handleNameSubmit}
+          gameState={gameState}
+          isConnected={wsManager.isConnected()}
+          onStartGame={handleGameStart}
+        />
       </div>
     );
   }
 
   return (
     <div className="App">
+      <ConnectionStatus />
       {!isGameStarted ? (
         <HomeScreen onStartGame={handleStartGame} />
       ) : (
         <>
-          <GameCanvas game={game} />
-          <GoalsPanel goals={game.goals} />
+          <GameCanvas wsManager={wsManager} />
+          <GoalsPanel goals={gameState.goals} />
         </>
       )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
