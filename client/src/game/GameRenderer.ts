@@ -1,5 +1,20 @@
-import { Building, BuildingType, buildingImages } from './BuildingTypes';
-import { GameState } from './GameState';
+import { GameState, Pothole, BuildingType, Building } from '@shared/GameState';
+import { buildingImages } from './BuildingTypes';
+
+interface RoadDrawingData {
+    left: number;
+    right: number;
+    center: number;
+    width: number;
+    y: number;
+}
+
+interface DrawingCoords {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 
 export class GameRenderer {
     private canvas: HTMLCanvasElement;
@@ -22,136 +37,162 @@ export class GameRenderer {
         });
     }
 
-    private getRoadWidthFromDistance(distance: number, state: GameState): number {
-        const progress = distance / state.ROAD_LENGTH;
-        return state.road.bottomWidth - progress * (state.road.bottomWidth - state.road.topWidth);
-    }
-
-    private getRoadYValueFromDistance(distance: number, state: GameState): number {
-        const progress = distance / state.ROAD_LENGTH;
-        return this.canvas.height - (progress * (this.canvas.height - state.road.topY));
-    }
-
-    private getRoadEdgesFromDistance(distance: number, state: GameState): { left: number; right: number } {
-        const width = this.getRoadWidthFromDistance(distance, state);
+    private getRoadDrawingDataForZ(z: number, state: GameState): RoadDrawingData {
+        const progress = z / state.road.length;
+        const width = state.road.width * (4 - progress * 3.8); // Same scaling as in GameState
         const centerX = this.canvas.width / 2;
+        const y = this.canvas.height - (progress * (this.canvas.height - state.road.topY));
+
         return {
             left: centerX - width / 2,
-            right: centerX + width / 2
+            right: centerX + width / 2,
+            center: centerX,
+            width: width,
+            y: y
         };
     }
 
-    private drawBuildingAtDistance(building: Building, state: GameState) {
-        // Calculate perspective scale based on distance
-        const progress = building.distance / state.ROAD_LENGTH;
-        const scale = 1 - progress;
+    private getRoadDrawingCoords(
+        x: number | 'left' | 'right',
+        z: number,
+        width: number,
+        height: number,
+        state: GameState
+    ): DrawingCoords {
+        const roadData = this.getRoadDrawingDataForZ(z, state);
+        const progress = z / state.road.length;
+        const scale = 1 - progress * 0.6; // Scale from 1.0 to 0.4 based on z
 
-        // Calculate dimensions with perspective
-        const dimensions = {
-            width: building.width * scale,
-            height: building.height * scale
+        const scaledWidth = width * scale;
+        const scaledHeight = height * scale;
+
+        let drawX: number;
+        if (x === 'left') {
+            drawX = roadData.left - scaledWidth;
+        } else if (x === 'right') {
+            drawX = roadData.right;
+        } else {
+            // Convert relative x position to screen position
+            drawX = roadData.left + (x * (roadData.width / state.road.width)) - scaledWidth / 2;
+        }
+
+        return {
+            x: drawX,
+            y: roadData.y - scaledHeight,
+            width: scaledWidth,
+            height: scaledHeight
         };
+    }
 
-        const scaledDistance = ((building.distance / state.ROAD_LENGTH) ** .5) * state.ROAD_LENGTH;
-
-        // Get road position at this distance
-        const roadY = this.getRoadYValueFromDistance(scaledDistance, state);
-        const edges = this.getRoadEdgesFromDistance(scaledDistance, state);
-
-        // Calculate final position
-        const position = {
-            x: building.side === 'left'
-                ? edges.left - dimensions.width
-                : edges.right,
-            y: roadY - dimensions.height
-        };
+    private drawBuilding(building: Building, state: GameState) {
+        const coords = this.getRoadDrawingCoords(
+            building.side,
+            building.z,
+            building.width,
+            building.height,
+            state
+        );
 
         // Draw the building
         const buildingImage = this.buildingImageElements[building.type];
         if (buildingImage.complete) {
-            this.ctx.drawImage(buildingImage, position.x, position.y, dimensions.width, dimensions.height);
+            this.ctx.drawImage(buildingImage, coords.x, coords.y, coords.width, coords.height);
         } else {
             this.ctx.fillStyle = '#334455';
-            this.ctx.fillRect(position.x, position.y, dimensions.width, dimensions.height);
+            this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
         }
 
         // Draw label
         const label = building.type.charAt(0).toUpperCase() + building.type.slice(1);
-        const distance = Math.round(building.distance);
+        const z = Math.round(building.z);
         this.ctx.font = '16px Arial';
         this.ctx.fillStyle = 'white';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText(`${label} (${distance}m)`, position.x + dimensions.width/2, position.y - 10);
+        this.ctx.fillText(`${label} (${z}m)`, coords.x + coords.width/2, coords.y - 10);
 
         // Draw building hitbox
         if (state.showDebugHitboxes) {
             this.drawHitbox(
-                position.x,
-                position.y,
-                dimensions.width,
-                dimensions.height,
-                `${building.type} (${Math.round(building.distance)}m)`
+                coords.x,
+                coords.y,
+                coords.width,
+                coords.height,
+                `${building.type} (${z}m)`
             );
         }
-
-        return { position, dimensions }; // Return for collision detection
     }
 
-    private drawRoadSegment(fromDistance: number, toDistance: number, state: GameState) {
-        const fromY = this.getRoadYValueFromDistance(fromDistance, state);
-        const toY = this.getRoadYValueFromDistance(toDistance, state);
-        const fromEdges = this.getRoadEdgesFromDistance(fromDistance, state);
-        const toEdges = this.getRoadEdgesFromDistance(toDistance, state);
+    private drawRoadSegment(fromZ: number, toZ: number, state: GameState) {
+        const fromRoad = this.getRoadDrawingDataForZ(fromZ, state);
+        const toRoad = this.getRoadDrawingDataForZ(toZ, state);
 
         // Draw road segment
         this.ctx.fillStyle = '#666666';
         this.ctx.beginPath();
-        this.ctx.moveTo(fromEdges.left, fromY);
-        this.ctx.lineTo(fromEdges.right, fromY);
-        this.ctx.lineTo(toEdges.right, toY);
-        this.ctx.lineTo(toEdges.left, toY);
+        this.ctx.moveTo(fromRoad.left, fromRoad.y);
+        this.ctx.lineTo(fromRoad.right, fromRoad.y);
+        this.ctx.lineTo(toRoad.right, toRoad.y);
+        this.ctx.lineTo(toRoad.left, toRoad.y);
         this.ctx.fill();
 
         // Draw center line for this segment
         this.ctx.strokeStyle = '#ffffff';
         this.ctx.lineWidth = 5;
         this.ctx.beginPath();
-        this.ctx.moveTo(this.canvas.width / 2, fromY);
-        this.ctx.lineTo(this.canvas.width / 2, toY);
+        this.ctx.moveTo(fromRoad.center, fromRoad.y);
+        this.ctx.lineTo(toRoad.center, toRoad.y);
         this.ctx.stroke();
     }
 
     private drawRoad(state: GameState) {
         // Draw road in segments for better visual quality
         const segments = 10;
-        const segmentLength = state.ROAD_LENGTH / segments;
+        const segmentLength = state.road.length / segments;
 
         for (let i = 0; i < segments; i++) {
-            const fromDistance = i * segmentLength;
-            const toDistance = (i + 1) * segmentLength;
-            this.drawRoadSegment(fromDistance, toDistance, state);
+            const fromZ = i * segmentLength;
+            const toZ = (i + 1) * segmentLength;
+            this.drawRoadSegment(fromZ, toZ, state);
         }
     }
 
     private drawBike(state: GameState) {
-        this.ctx.fillStyle = state.bike.isColliding ? '#0000ff' : '#ff0000';
-        this.ctx.fillRect(
+        const coords = this.getRoadDrawingCoords(
             state.bike.x,
-            state.bike.y - state.bike.height,
+            state.bike.z,
             state.bike.width,
-            state.bike.height
+            state.bike.height,
+            state
         );
 
-        // Draw bike hitbox
+        // Draw the bike
+        this.ctx.fillStyle = state.bike.isColliding ? '#0000ff' : '#ff0000';
+        this.ctx.fillRect(
+            coords.x,
+            coords.y,
+            coords.width,
+            coords.height
+        );
+
+        // Draw bike hitbox if debug mode is on
         if (state.showDebugHitboxes) {
             this.drawHitbox(
-                state.bike.x,
-                state.bike.y - state.bike.height,
-                state.bike.width,
-                state.bike.height,
-                'Bike'
+                coords.x,
+                coords.y,
+                coords.width,
+                coords.height,
+                `Bike`
             );
         }
+
+        // Draw coordinates for debugging
+        this.ctx.fillStyle = 'white';
+        this.ctx.font = '12px Arial';
+        this.ctx.fillText(
+            `x: ${Math.round(state.bike.x)}, z: ${Math.round(state.bike.z)}`,
+            coords.x,
+            coords.y - 20
+        );
     }
 
     private drawHitbox(x: number, y: number, width: number, height: number, label?: string) {
@@ -179,12 +220,98 @@ export class GameRenderer {
     }
 
     private drawBuildings(state: GameState) {
-        // Sort buildings by distance (furthest first)
-        const sortedBuildings = [...state.buildings].sort((a, b) => b.distance - a.distance);
+        // Sort buildings by z (furthest first)
+        const sortedBuildings = [...state.buildings].sort((a, b) => b.z - a.z);
+        sortedBuildings.forEach(building => this.drawBuilding(building, state));
+    }
 
-        sortedBuildings.forEach(building => {
-            this.drawBuildingAtDistance(building, state);
-        });
+    private drawPothole(pothole: Pothole, state: GameState) {
+        const coords = this.getRoadDrawingCoords(
+            pothole.x,
+            pothole.z,
+            pothole.width,
+            pothole.height,
+            state
+        );
+
+        // Draw the pothole
+        this.ctx.fillStyle = state.collidedPotholeIds.includes(pothole.id) ? '#ff0000' : '#0000ff';
+        this.ctx.fillRect(
+            coords.x,
+            coords.y,
+            coords.width,
+            coords.height
+        );
+
+        // Always draw coordinates for debugging
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '12px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(
+            `X: ${Math.round(pothole.x)}, Z: ${Math.round(pothole.z)}`,
+            coords.x + coords.width/2,
+            coords.y
+        );
+        this.ctx.fillText(
+            `Screen: (${Math.round(coords.x)}, ${Math.round(coords.y)})`,
+            coords.x + coords.width/2,
+            coords.y - 15
+        );
+
+        // Draw hitbox if debug mode is on
+        if (state.showDebugHitboxes) {
+            this.drawHitbox(
+                coords.x,
+                coords.y,
+                coords.width,
+                coords.height,
+                `Pothole ${pothole.id}`
+            );
+        }
+    }
+
+    private drawPotholes(state: GameState) {
+        // Sort potholes by z (furthest first)
+        const sortedPotholes = [...state.potholes].sort((a, b) => b.z - a.z);
+        sortedPotholes.forEach(pothole => this.drawPothole(pothole, state));
+    }
+
+    private drawHealthBar(state: GameState) {
+        const barWidth = 200;
+        const barHeight = 20;
+        const padding = 10;
+        const x = padding;
+        const y = padding;
+
+        // Draw background
+        this.ctx.fillStyle = '#333333';
+        this.ctx.fillRect(x, y, barWidth, barHeight);
+
+        // Draw health
+        const healthWidth = (state.health / state.maxHealth) * barWidth;
+        this.ctx.fillStyle = this.getHealthColor(state.health / state.maxHealth);
+        this.ctx.fillRect(x, y, healthWidth, barHeight);
+
+        // Draw border
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(x, y, barWidth, barHeight);
+
+        // Draw text
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(
+            `Health: ${Math.round(state.health)}/${state.maxHealth}`,
+            x + barWidth / 2,
+            y + barHeight / 2 + 5
+        );
+    }
+
+    private getHealthColor(percentage: number): string {
+        if (percentage > 0.6) return '#00ff00'; // Green
+        if (percentage > 0.3) return '#ffff00'; // Yellow
+        return '#ff0000'; // Red
     }
 
     public render(state: GameState) {
@@ -193,7 +320,9 @@ export class GameRenderer {
 
         // Draw game elements
         this.drawRoad(state);
+        this.drawPotholes(state);
         this.drawBuildings(state);
         this.drawBike(state);
+        this.drawHealthBar(state);
     }
 }

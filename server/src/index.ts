@@ -5,9 +5,11 @@ import {
     Player,
     ClientMessage,
     ServerMessage,
-    createInitialGameState
-} from '@shared/types/GameState';
-import { updateBikePosition } from '@shared/utils/bikePhysics';
+    createInitialGameState,
+    updateBikePosition,
+    updateBuildings,
+    updatePotholes
+} from '@shared/GameState';
 
 const wss = new WebSocketServer({ port: 3000 });
 
@@ -22,12 +24,6 @@ const gameState: ServerGameState = {
 const connections = new Map<string, WebSocket>();
 
 let gameLoopInterval: NodeJS.Timeout | null = null;
-let lastBroadcastTime = 0;
-const NORMAL_BROADCAST_INTERVAL = 1000; // Normal state updates every 1 second
-const FAST_BROADCAST_INTERVAL = 50;     // Fast updates every 50ms
-const FAST_MODE_DURATION = 500;         // Stay in fast mode for 500ms after input
-let currentBroadcastInterval = NORMAL_BROADCAST_INTERVAL;
-let fastModeTimeout: NodeJS.Timeout | null = null;
 let lastUpdateTime = Date.now();
 
 function updateGame(state: GameState): GameState {
@@ -35,27 +31,27 @@ function updateGame(state: GameState): GameState {
     const deltaTime = (now - lastUpdateTime) / 1000;
     lastUpdateTime = now;
 
-    // Update building positions
-    state = {
+    // Update bike position
+    const newBike = updateBikePosition(state, deltaTime);
+
+    // Update buildings and handle collisions
+    const buildingUpdates = updateBuildings(state.buildings, state, deltaTime);
+
+    // Update potholes and handle collisions
+    const potholeUpdates = updatePotholes(state.potholes, state, deltaTime);
+
+    // Return updated state
+    return {
         ...state,
-        buildings: state.buildings.map(building => {
-            const speedScale = 1 + (1 - building.distance / state.ROAD_LENGTH) * 2;
-            building.distance -= 2 * speedScale;
-
-            if (building.distance < 0) {
-                building.distance = state.ROAD_LENGTH;
-                building.id = `building_${Math.random().toString(36).substr(2, 9)}`;
-                const types = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'] as const;
-                building.type = types[Math.floor(Math.random() * types.length)];
-            }
-            return building;
-        })
+        bike: newBike,
+        buildings: buildingUpdates.buildings,
+        potholes: potholeUpdates.potholes,
+        score: buildingUpdates.score,
+        goals: buildingUpdates.goals,
+        health: potholeUpdates.health,
+        collidedBuildingIds: buildingUpdates.collidedBuildingIds,
+        collidedPotholeIds: potholeUpdates.collidedPotholeIds
     };
-
-    // Update bike position using shared function with deltaTime
-    state = updateBikePosition(state, deltaTime);
-
-    return state;
 }
 
 function startGameLoop() {
@@ -73,71 +69,52 @@ function startGameLoop() {
     gameState.gameState.players = gameState.players;
     gameState.gameState.isGameStarted = gameState.isStarted;
 
-    console.log('Game state initialized:', {
-        playerCount: gameState.players.length,
-        isStarted: gameState.isStarted
-    });
-
-    lastBroadcastTime = Date.now();
-
-    // Start game loop at 30fps
+    // Start game loop at 30fps with broadcast
     gameLoopInterval = setInterval(() => {
         if (gameState.gameState) {
+            // Update game state
             gameState.gameState = updateGame(gameState.gameState);
             gameState.gameState.players = gameState.players; // Keep players in sync
 
-            const now = Date.now();
-            if (now - lastBroadcastTime >= currentBroadcastInterval) {
-                // Broadcast updated game state to all clients
-                const gameStateMessage: ServerMessage = {
-                    type: 'gameState',
-                    payload: {
-                        ...gameState.gameState,
-                        lastUpdateTime: now // Add timestamp for client interpolation
-                    }
-                };
+            // Broadcast state
+            broadcastGameState();
 
-                const messageStr = JSON.stringify(gameStateMessage);
-                let activeConnections = 0;
-                connections.forEach((clientWs) => {
-                    if (clientWs.readyState === WebSocket.OPEN) {
-                        try {
-                            clientWs.send(messageStr);
-                            activeConnections++;
-                        } catch (error) {
-                            console.error('Error sending game state:', error);
-                        }
-                    }
-                });
-
-                if (activeConnections === 0) {
-                    console.log('No active connections, stopping game loop');
-                    clearInterval(gameLoopInterval);
-                    gameLoopInterval = null;
+            // Check for active connections
+            let hasActiveConnections = false;
+            connections.forEach((clientWs) => {
+                if (clientWs.readyState === WebSocket.OPEN) {
+                    hasActiveConnections = true;
                 }
+            });
 
-                lastBroadcastTime = now;
+            if (!hasActiveConnections && gameLoopInterval) {
+                console.log('No active connections, stopping game loop');
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
             }
         }
-    }, 1000 / 30); // Internal updates still at 30fps
+    }, 1000 / 30); // Update and broadcast at 30fps
 
     console.log('Game loop started');
 }
 
-function handlePlayerInput() {
-    // Enter fast mode
-    currentBroadcastInterval = FAST_BROADCAST_INTERVAL;
+function broadcastGameState() {
+    if (!gameState.gameState) return;
 
-    // Clear existing timeout if there is one
-    if (fastModeTimeout) {
-        clearTimeout(fastModeTimeout);
-    }
+    const gameStateMessage: ServerMessage = {
+        type: 'gameState',
+        payload: {
+            ...gameState.gameState,
+            lastUpdateTime: Date.now()
+        }
+    };
 
-    // Set timeout to return to normal mode
-    fastModeTimeout = setTimeout(() => {
-        currentBroadcastInterval = NORMAL_BROADCAST_INTERVAL;
-        fastModeTimeout = null;
-    }, FAST_MODE_DURATION);
+    const messageStr = JSON.stringify(gameStateMessage);
+    connections.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(messageStr);
+        }
+    });
 }
 
 wss.on('connection', (ws: WebSocket) => {
@@ -147,11 +124,15 @@ wss.on('connection', (ws: WebSocket) => {
     ws.on('message', (data: string) => {
         try {
             const message = JSON.parse(data) as ClientMessage;
-            console.log('Received message:', { type: message.type, playerId });
+            console.log('Received message:', message);
+
+            // Initialize game state if not exists
+            if (!gameState.gameState) {
+                gameState.gameState = createInitialGameState();
+            }
 
             switch (message.type) {
                 case 'connect':
-                    // Handle player connection
                     playerId = Math.random().toString(36).substring(7);
                     const newPlayer: Player = {
                         id: playerId,
@@ -162,64 +143,48 @@ wss.on('connection', (ws: WebSocket) => {
                     console.log('New player connected:', { playerId, name: message.payload });
                     gameState.players.push(newPlayer);
                     connections.set(playerId, ws);
-
-                    // Initialize game state if not exists
-                    if (!gameState.gameState) {
-                        gameState.gameState = createInitialGameState();
-                    }
                     gameState.gameState.players = gameState.players;
 
-                    // Broadcast updated game state to all clients
                     broadcastGameState();
                     break;
 
                 case 'startGame':
-                    console.log('Start game requested by player:', playerId);
-                    // Handle game start - now allows single player
                     if (gameState.players.length >= 1) {
-                        console.log('Starting game with players:', gameState.players);
                         gameState.isStarted = true;
                         if (gameState.gameState) {
                             gameState.gameState.isGameStarted = true;
                         }
                         startGameLoop();
 
-                        // Broadcast game started message to all clients
-                        const startMessage: ServerMessage = {
-                            type: 'gameStarted'
-                        };
-
-                        const messageStr = JSON.stringify(startMessage);
+                        const startMessage: ServerMessage = { type: 'gameStarted' };
                         connections.forEach((clientWs) => {
                             if (clientWs.readyState === WebSocket.OPEN) {
-                                try {
-                                    clientWs.send(messageStr);
-                                } catch (error) {
-                                    console.error('Error sending start message:', error);
-                                }
+                                clientWs.send(JSON.stringify(startMessage));
                             }
                         });
                     }
                     break;
 
                 case 'moveLeft':
-                    if (gameState.gameState) {
-                        gameState.gameState.bike.leftPressCount += message.pressed ? 1 : -1;
-                        // Ensure count doesn't go below 0
-                        gameState.gameState.bike.leftPressCount = Math.max(0, gameState.gameState.bike.leftPressCount);
-
-                        // Immediate broadcast
-                        broadcastGameState();
-                    }
-                    break;
                 case 'moveRight':
-                    if (gameState.gameState) {
-                        gameState.gameState.bike.rightPressCount += message.pressed ? 1 : -1;
-                        // Ensure count doesn't go below 0
-                        gameState.gameState.bike.rightPressCount = Math.max(0, gameState.gameState.bike.rightPressCount);
-
-                        // Immediate broadcast
-                        broadcastGameState();
+                case 'moveUp':
+                case 'moveDown':
+                    if (gameState.gameState && gameState.isStarted) {
+                        const pressCount = message.pressed ? 1 : -1;
+                        switch (message.type) {
+                            case 'moveLeft':
+                                gameState.gameState.bike.leftPressCount = Math.max(0, gameState.gameState.bike.leftPressCount + pressCount);
+                                break;
+                            case 'moveRight':
+                                gameState.gameState.bike.rightPressCount = Math.max(0, gameState.gameState.bike.rightPressCount + pressCount);
+                                break;
+                            case 'moveUp':
+                                gameState.gameState.bike.upPressCount = Math.max(0, gameState.gameState.bike.upPressCount + pressCount);
+                                break;
+                            case 'moveDown':
+                                gameState.gameState.bike.downPressCount = Math.max(0, gameState.gameState.bike.downPressCount + pressCount);
+                                break;
+                        }
                     }
                     break;
             }
@@ -228,63 +193,27 @@ wss.on('connection', (ws: WebSocket) => {
         }
     });
 
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-    });
-
-    ws.on('close', (code, reason) => {
-        console.log('WebSocket closed:', { playerId, code, reason: reason.toString() });
+    ws.on('close', () => {
         if (playerId) {
-            // Remove player from game state
             gameState.players = gameState.players.filter(p => p.id !== playerId);
             if (gameState.gameState) {
                 gameState.gameState.players = gameState.players;
             }
             connections.delete(playerId);
-            console.log('Player removed:', { playerId, remainingPlayers: gameState.players.length });
+            broadcastGameState();
 
-            // Reset game state if game hasn't started and broadcast update
-            if (!gameState.isStarted) {
-                broadcastGameState();
+            if (connections.size === 0) {
+                if (gameLoopInterval) {
+                    clearInterval(gameLoopInterval);
+                    gameLoopInterval = null;
+                }
+                gameState.isStarted = false;
+                if (gameState.gameState) {
+                    gameState.gameState.isGameStarted = false;
+                }
             }
         }
     });
-
-    function broadcastGameState() {
-        if (!gameState.gameState) {
-            gameState.gameState = createInitialGameState();
-        }
-
-        // Update the game state with current players and game status
-        gameState.gameState.players = gameState.players;
-        gameState.gameState.isGameStarted = gameState.isStarted;
-
-        // Send the complete game state
-        const gameStateMessage: ServerMessage = {
-            type: 'gameState',
-            payload: gameState.gameState
-        };
-
-        console.log('Broadcasting game state:', {
-            playerCount: gameState.players.length,
-            isStarted: gameState.isStarted,
-            connectionCount: connections.size
-        });
-
-        const messageStr = JSON.stringify(gameStateMessage);
-        let sentCount = 0;
-        connections.forEach((clientWs) => {
-            if (clientWs.readyState === WebSocket.OPEN) {
-                try {
-                    clientWs.send(messageStr);
-                    sentCount++;
-                } catch (error) {
-                    console.error('Error broadcasting game state:', error);
-                }
-            }
-        });
-        console.log(`Game state broadcast complete: ${sentCount}/${connections.size} clients received`);
-    }
 });
 
 console.log('WebSocket server is running on port 3000');

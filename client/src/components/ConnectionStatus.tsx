@@ -7,14 +7,10 @@ export const ConnectionStatus: React.FC = () => {
     const wsManager = WebSocketManager.getInstance();
 
     useEffect(() => {
-        const unsubscribe = wsManager.onConnection((connected) => {
-            setIsConnected(connected);
+        const unsubscribe = wsManager.onConnection((isConnected) => {
+            setIsConnected(isConnected);
         });
-
-        // Initial state
-        setIsConnected(wsManager.isConnected());
-
-        return () => unsubscribe();
+        return unsubscribe;
     }, []);
 
     return (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameGoals } from '../game/Game';
+import { GameGoals } from '@shared/GameState';
 import './GoalsPanel.css';
 
 interface GoalsPanelProps {
@@ -28,10 +28,10 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ goals }) => {
       </div>
       <div className="goal-item">
         <span className="goal-icon">
-          {goals.restaurantsVisited.size >= 3 ? '✅' : '🍽️'}
+          {goals.restaurantsVisited.length >= 3 ? '✅' : '🍽️'}
         </span>
         <span className="goal-text">
-          Visit Different Restaurants: {goals.restaurantsVisited.size}/3
+          Visit Different Restaurants: {goals.restaurantsVisited.length}/3
         </span>
       </div>
     </div>

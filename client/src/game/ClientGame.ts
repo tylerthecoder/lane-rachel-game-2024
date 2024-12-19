@@ -1,53 +1,56 @@
-import { GameState } from '@shared/types/GameState';
-import { GameRenderer } from './GameRenderer';
+import { GameState, updateBikePosition, updateBuildings, updatePotholes } from '@shared/GameState';
+import { GameRenderer, } from './GameRenderer';
 import { WebSocketManager } from '../services/WebSocketManager';
-import { updateBikePosition } from '@shared/utils/bikePhysics';
 
 export class ClientGame {
     private renderer: GameRenderer;
     private gameState: GameState;
-    private lastUpdateTime: number;
     private animationFrameId: number | null = null;
     private wsManager: WebSocketManager;
     private isStarted: boolean = false;
     private keyStates: { [key: string]: boolean } = {
         ArrowLeft: false,
-        ArrowRight: false
+        ArrowRight: false,
+        ArrowUp: false,
+        ArrowDown: false
     };
 
     constructor(canvas: HTMLCanvasElement, initialState: GameState, wsManager: WebSocketManager) {
         this.renderer = new GameRenderer(canvas);
         this.gameState = initialState;
-        this.lastUpdateTime = Date.now();
         this.wsManager = wsManager;
     }
 
     public updateGameState(newState: GameState) {
         this.gameState = newState;
-        this.lastUpdateTime = newState.lastUpdateTime || Date.now();
+    }
+
+    public getGameState(): GameState {
+        return this.gameState;
     }
 
     private updateLocalState(deltaTime: number) {
-        // Update building positions locally
-        const updatedBuildings = this.gameState.buildings.map(building => {
-            const speedScale = 1 + (1 - building.distance / this.gameState.ROAD_LENGTH) * 2;
-            const newDistance = building.distance - (2 * speedScale * deltaTime * 30);
+        // Update bike position
+        const newBike = updateBikePosition(this.gameState, deltaTime);
 
-            if (newDistance < 0) {
-                return building;
-            }
+        // Update buildings and handle collisions
+        const buildingUpdates = updateBuildings(this.gameState.buildings, this.gameState, deltaTime);
 
-            return {
-                ...building,
-                distance: newDistance
-            };
-        });
+        // Update potholes and handle collisions
+        const potholeUpdates = updatePotholes(this.gameState.potholes, this.gameState, deltaTime);
 
-        // Update game state using shared function
-        this.gameState = updateBikePosition({
+        // Update game state with all changes
+        this.gameState = {
             ...this.gameState,
-            buildings: updatedBuildings
-        }, deltaTime);
+            bike: newBike,
+            buildings: buildingUpdates.buildings,
+            potholes: potholeUpdates.potholes,
+            score: buildingUpdates.score,
+            goals: buildingUpdates.goals,
+            health: potholeUpdates.health,
+            collidedBuildingIds: buildingUpdates.collidedBuildingIds,
+            collidedPotholeIds: potholeUpdates.collidedPotholeIds
+        };
     }
 
     public start() {
@@ -102,6 +105,18 @@ export class ClientGame {
                         this.wsManager.sendMessage({ type: 'moveRight', pressed: true });
                     }
                     break;
+                case 'ArrowUp':
+                    if (!this.keyStates.ArrowUp) {
+                        this.keyStates.ArrowUp = true;
+                        this.wsManager.sendMessage({ type: 'moveUp', pressed: true });
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (!this.keyStates.ArrowDown) {
+                        this.keyStates.ArrowDown = true;
+                        this.wsManager.sendMessage({ type: 'moveDown', pressed: true });
+                    }
+                    break;
             }
         };
 
@@ -117,6 +132,18 @@ export class ClientGame {
                     if (this.keyStates.ArrowRight) {
                         this.keyStates.ArrowRight = false;
                         this.wsManager.sendMessage({ type: 'moveRight', pressed: false });
+                    }
+                    break;
+                case 'ArrowUp':
+                    if (this.keyStates.ArrowUp) {
+                        this.keyStates.ArrowUp = false;
+                        this.wsManager.sendMessage({ type: 'moveUp', pressed: false });
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (this.keyStates.ArrowDown) {
+                        this.keyStates.ArrowDown = false;
+                        this.wsManager.sendMessage({ type: 'moveDown', pressed: false });
                     }
                     break;
             }
@@ -135,6 +162,12 @@ export class ClientGame {
             }
             if (this.keyStates.ArrowRight) {
                 this.wsManager.sendMessage({ type: 'moveRight', pressed: false });
+            }
+            if (this.keyStates.ArrowUp) {
+                this.wsManager.sendMessage({ type: 'moveUp', pressed: false });
+            }
+            if (this.keyStates.ArrowDown) {
+                this.wsManager.sendMessage({ type: 'moveDown', pressed: false });
             }
         };
     }

@@ -1,19 +1,4 @@
-export type BuildingType =
-  | 'restaurant'
-  | 'pokemon'
-  | 'dogStore'
-  | 'park'
-  | 'house';
-
-export interface Building {
-  id: string;
-  side: 'left' | 'right';
-  y: number;
-  width: number;
-  height: number;
-  distance: number;
-  type: BuildingType;
-}
+import { BuildingType } from "@shared/GameState";
 
 // Map building types to their image URLs - temporarily using the same image for all types
 export const buildingImages: Record<BuildingType, string> = {

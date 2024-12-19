@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameState } from '@shared/types/GameState';
+import { GameState } from '@shared/GameState';
 import './ConnectionScreen.css';
 
 interface ConnectionScreenProps {

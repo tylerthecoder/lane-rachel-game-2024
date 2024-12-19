@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css'
-import { GameCanvas } from './components/GameCanvas'
+import { GameCanvas } from './game/GameCanvas'
 import { HomeScreen } from './components/HomeScreen'
 import { ConnectionScreen } from './components/ConnectionScreen'
 import { ConnectionStatus } from './components/ConnectionStatus'
-import { GoalsPanel } from './components/GoalsPanel'
-import { GameState, createInitialGameState } from '@shared/types/GameState'
+import { GameState, createInitialGameState } from '@shared/GameState'
 import { WebSocketManager } from './services/WebSocketManager';
 
 function App() {
@@ -13,9 +12,10 @@ function App() {
   const [showEndScreen, setShowEndScreen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
-  const wsManager = WebSocketManager.getInstance();
+  const wsManagerRef = useRef<WebSocketManager>(WebSocketManager.getInstance());
 
   useEffect(() => {
+    const wsManager = wsManagerRef.current;
     const unsubscribeGameState = wsManager.onGameState((newGameState) => {
       setGameState(newGameState);
     });
@@ -25,23 +25,35 @@ function App() {
       setIsConnecting(false);
     });
 
+    const unsubscribeConnection = wsManager.onConnection((isConnected) => {
+      if (!isConnected) {
+        // If disconnected, try to reconnect after a short delay
+        setTimeout(() => {
+          if (!wsManager.isConnected()) {
+            wsManager.connect();
+          }
+        }, 1000);
+      }
+    });
+
     return () => {
       unsubscribeGameState();
       unsubscribeGameStart();
+      unsubscribeConnection();
     };
   }, []);
 
   const handleStartGame = () => {
     setIsConnecting(true);
-    wsManager.connect();
+    wsManagerRef.current.connect();
   };
 
   const handleNameSubmit = (name: string) => {
-    wsManager.sendMessage({ type: 'connect', payload: name });
+    wsManagerRef.current.sendMessage({ type: 'connect', payload: name });
   };
 
   const handleGameStart = () => {
-    wsManager.sendMessage({ type: 'startGame' });
+    wsManagerRef.current.sendMessage({ type: 'startGame' });
   };
 
   const handlePlayAgain = () => {
@@ -49,7 +61,7 @@ function App() {
     setShowEndScreen(false);
     setIsGameStarted(false);
     setIsConnecting(false);
-    wsManager.disconnect();
+    wsManagerRef.current.disconnect();
   };
 
   useEffect(() => {
@@ -80,7 +92,7 @@ function App() {
         <ConnectionScreen
           onNameSubmit={handleNameSubmit}
           gameState={gameState}
-          isConnected={wsManager.isConnected()}
+          isConnected={wsManagerRef.current.isConnected()}
           onStartGame={handleGameStart}
         />
       </div>
@@ -93,10 +105,7 @@ function App() {
       {!isGameStarted ? (
         <HomeScreen onStartGame={handleStartGame} />
       ) : (
-        <>
-          <GameCanvas wsManager={wsManager} />
-          <GoalsPanel goals={gameState.goals} />
-        </>
+        <GameCanvas wsManager={wsManagerRef.current} />
       )}
     </div>
   );

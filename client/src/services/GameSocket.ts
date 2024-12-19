@@ -1,17 +1,7 @@
-import type { ClientMessage, ServerMessage } from '../../../server/src/types';
 
 interface GameMessage {
     type: 'connect' | 'startGame' | 'gameState' | 'gameStarted';
     payload?: any;
-}
-
-interface GameState {
-    players: Array<{
-        id: string;
-        name: string;
-        isReady: boolean;
-    }>;
-    isStarted: boolean;
 }
 
 export class GameSocket {
