@@ -3,6 +3,7 @@
   margin: 0;
   padding: 0;
   text-align: center;
+  font-family: 'Press Start 2P', cursive;
 }
 
 .logo {
@@ -45,7 +46,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #282c34;
+  background-color: #242424;
   color: white;
 }
 
@@ -74,35 +75,64 @@ canvas {
   color: rgba(255, 255, 255, 0.87);
 }
 
-.game-description {
-  max-width: 600px;
+.home-screen h1 {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  color: #4CAF50;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+}
+
+.game-tagline {
+  font-size: 1.5rem;
   margin: 2rem 0;
+  color: #fff;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.game-description ul {
-  list-style-type: none;
-  padding: 0;
+.name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 400px;
+  margin-top: 2rem;
 }
 
-.game-description li {
-  margin: 0.5rem 0;
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.87);
+.name-form input {
+  padding: 1rem;
+  font-size: 1.2rem;
+  border: 2px solid #4CAF50;
+  border-radius: 8px;
+  background-color: #1a1a1a;
+  color: white;
+  outline: none;
+  font-family: 'Press Start 2P', cursive;
+}
+
+.name-form input:focus {
+  border-color: #45a049;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
 }
 
 .start-button {
-  padding: 1rem 2rem;
-  font-size: 1.5rem;
+  padding: 1.2rem 2.4rem;
+  font-size: 1.2rem;
   background-color: #4CAF50;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-family: 'Press Start 2P', cursive;
 }
 
 .start-button:hover {
   background-color: #45a049;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
 }
 
 .end-screen {
@@ -115,18 +145,18 @@ canvas {
   background-color: #242424;
   padding: 2rem;
   color: rgba(255, 255, 255, 0.87);
-  font-family: 'Press Start 2P', cursive;
 }
 
 .end-screen h1 {
   color: #4CAF50;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
   margin-bottom: 2rem;
-  font-size: 2.5em;
+  font-size: 2.5rem;
+  animation: rainbow 5s infinite;
 }
 
 .end-screen p {
-  font-size: 1.2em;
+  font-size: 1.2rem;
   margin-bottom: 2rem;
   color: #fff;
 }
@@ -140,6 +170,63 @@ canvas {
   100% { color: #4b0082; }
 }
 
-.end-screen h1 {
-  animation: rainbow 5s infinite;
+.score-display {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.score-display h2 {
+  margin: 0;
+  color: #4CAF50;
+  font-size: 1.2rem;
+}
+
+.score-display .player-name {
+  margin: 0.5rem 0 0 0;
+  color: #fff;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.game-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.game-canvas {
+  border: 2px solid #4CAF50;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);
+}
+
+.operation-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100vh;
+  background-color: #1a1a1a;
+  color: #4CAF50;
+}
+
+.operation-screen h1 {
+  font-size: 3rem;
+  text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }

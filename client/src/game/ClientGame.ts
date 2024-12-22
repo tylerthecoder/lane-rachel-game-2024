@@ -1,13 +1,11 @@
-import { GameState, updateBikePosition, updateBuildings, updatePotholes } from '@shared/GameState';
-import { GameRenderer, } from './GameRenderer';
+import { GameState, updateBikePosition, updateBuildings, updateRoadObjects } from '@shared/GameState';
 import { WebSocketManager } from '../services/WebSocketManager';
 
 export class ClientGame {
-    private renderer: GameRenderer;
     private gameState: GameState;
-    private animationFrameId: number | null = null;
     private wsManager: WebSocketManager;
     private isStarted: boolean = false;
+    private updateInterval: NodeJS.Timeout | null = null;
     private keyStates: { [key: string]: boolean } = {
         ArrowLeft: false,
         ArrowRight: false,
@@ -15,8 +13,7 @@ export class ClientGame {
         ArrowDown: false
     };
 
-    constructor(canvas: HTMLCanvasElement, initialState: GameState, wsManager: WebSocketManager) {
-        this.renderer = new GameRenderer(canvas);
+    constructor(initialState: GameState, wsManager: WebSocketManager) {
         this.gameState = initialState;
         this.wsManager = wsManager;
     }
@@ -29,59 +26,33 @@ export class ClientGame {
         return this.gameState;
     }
 
-    private updateLocalState(deltaTime: number) {
-        // Update bike position
-        const newBike = updateBikePosition(this.gameState, deltaTime);
-
-        // Update buildings and handle collisions
-        const buildingUpdates = updateBuildings(this.gameState.buildings, this.gameState, deltaTime);
-
-        // Update potholes and handle collisions
-        const potholeUpdates = updatePotholes(this.gameState.potholes, this.gameState, deltaTime);
-
-        // Update game state with all changes
-        this.gameState = {
-            ...this.gameState,
-            bike: newBike,
-            buildings: buildingUpdates.buildings,
-            potholes: potholeUpdates.potholes,
-            score: buildingUpdates.score,
-            goals: buildingUpdates.goals,
-            health: potholeUpdates.health,
-            collidedBuildingIds: buildingUpdates.collidedBuildingIds,
-            collidedPotholeIds: potholeUpdates.collidedPotholeIds
-        };
+    private updateState(deltaTime: number) {
+        // Chain the update functions
+        this.gameState = updateRoadObjects(
+            updateBuildings(
+                updateBikePosition(this.gameState, deltaTime),
+                deltaTime
+            ),
+            deltaTime
+        );
     }
 
     public start() {
         if (this.isStarted) return;
         this.isStarted = true;
 
-        let lastFrameTime = performance.now();
-        const gameLoop = (currentTime: number) => {
-            const deltaTime = (currentTime - lastFrameTime) / 1000;
-
-            // Update local state at 30fps
-            if (deltaTime >= (1000 / 30) / 1000) {
-                this.updateLocalState(deltaTime);
-                lastFrameTime = currentTime;
-            }
-
-            // Render at full fps
-            this.renderer.render(this.gameState);
-            this.animationFrameId = requestAnimationFrame(gameLoop);
-        };
-
-        this.animationFrameId = requestAnimationFrame(gameLoop);
+        // Update game state at 30fps
+        this.updateInterval = setInterval(() => {
+            this.updateState(1/30); // Fixed time step
+        }, 1000 / 30);
     }
 
     public stop() {
-        console.log("stop");
-        if (this.animationFrameId !== null) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-            this.isStarted = false;
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
         }
+        this.isStarted = false;
     }
 
     public isGameStarted(): boolean {

@@ -42,28 +42,38 @@ export interface Building {
     type: BuildingType;
 }
 
+export type PlayerLocation = 'bike' | 'operation-minigame';
+
 export interface Player {
     id: string;
     name: string;
     isReady: boolean;
+    location: PlayerLocation;
 }
 
-export interface Pothole {
+export type RoadObjectType = 'pothole' | 'pedestrian';
+
+export interface RoadObject {
     id: string;
+    type: RoadObjectType;
     x: number;
     width: number;
     height: number;
     z: number;
 }
 
+export interface OperationMinigameEndState {
+    score: number;
+}
+
 export interface GameState {
     bike: BikeState;
     road: RoadDimensions;
     buildings: Building[];
-    potholes: Pothole[];
+    roadObjects: RoadObject[];
     goals: GameGoals;
     collidedBuildingIds: string[];
-    collidedPotholeIds: string[];
+    collidedRoadObjectIds: string[];
     showDebugHitboxes: boolean;
     players: Player[];
     isGameStarted: boolean;
@@ -72,12 +82,6 @@ export interface GameState {
     maxHealth: number;
     score: number;
     lastUpdateTime?: number;
-}
-
-export interface ServerGameState {
-    players: Player[];
-    isStarted: boolean;
-    gameState: GameState | null;
 }
 
 export type ServerMessage =
@@ -127,8 +131,54 @@ function generateRandomId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-export function updateBuildings(buildings: Building[], gameState: GameState, deltaTime: number): { buildings: Building[], score: number, goals: GameGoals, collidedBuildingIds: string[] } {
-    const newBuildings = buildings.map(building => {
+export function updateBikePosition(gameState: GameState, deltaTime: number): GameState {
+    // Calculate X movement based on press counts
+    let newX = gameState.bike.x;
+    if (gameState.bike.leftPressCount > 0 || gameState.bike.rightPressCount > 0) {
+        const baseSpeed = gameState.bike.turnSpeed;
+        const leftSpeed = gameState.bike.leftPressCount * baseSpeed * deltaTime * 30;
+        const rightSpeed = gameState.bike.rightPressCount * baseSpeed * deltaTime * 30;
+        const netMovement = rightSpeed - leftSpeed;
+
+        // Update x position relative to road width (0-100)
+        newX = Math.max(0, Math.min(100, newX + netMovement));
+    }
+
+    // Calculate forward/backward movement
+    let newSpeed = gameState.bike.speed;
+    const acceleration = 5.0;
+    const deceleration = 3.0;
+    const accDiff = acceleration * deltaTime * 30;
+
+    if (gameState.bike.upPressCount > 0) {
+        newSpeed = Math.min(gameState.bike.maxSpeed, newSpeed + accDiff);
+    } else if (gameState.bike.downPressCount > 0) {
+        newSpeed = Math.max(-gameState.bike.maxSpeed / 2, newSpeed - accDiff);
+    } else {
+        // Apply deceleration when no keys are pressed
+        if (Math.abs(newSpeed) < deceleration * deltaTime * 30) {
+            newSpeed = 0;
+        } else {
+            newSpeed -= Math.sign(newSpeed) * deceleration * deltaTime * 30;
+        }
+    }
+
+    // Calculate bike's z position (20% of road length)
+    const bikeZ = gameState.road.length * 0.2;
+
+    return {
+        ...gameState,
+        bike: {
+            ...gameState.bike,
+            x: newX,
+            z: bikeZ,
+            speed: newSpeed
+        }
+    };
+}
+
+export function updateBuildings(gameState: GameState, deltaTime: number): GameState {
+    const newBuildings = gameState.buildings.map(building => {
         // Move building closer with increasing speed as it gets closer
         const speedScale = 1 + (1 - building.z / gameState.road.length) * 2;
         const newZ = building.z - (2 * speedScale * deltaTime * 30);
@@ -190,6 +240,7 @@ export function updateBuildings(buildings: Building[], gameState: GameState, del
     });
 
     return {
+        ...gameState,
         buildings: newBuildings,
         score: newScore,
         goals: newGoals,
@@ -197,112 +248,91 @@ export function updateBuildings(buildings: Building[], gameState: GameState, del
     };
 }
 
-export function updatePotholes(potholes: Pothole[], gameState: GameState, deltaTime: number): { potholes: Pothole[], health: number, collidedPotholeIds: string[] } {
-    const newPotholes = potholes.map(pothole => {
-        // Move pothole closer with increasing speed as it gets closer
-        const speedScale = 1 + (1 - pothole.z / gameState.road.length) * 2;
-        const newZ = pothole.z - (2 * speedScale * deltaTime * 30);
+export function updateRoadObjects(gameState: GameState, deltaTime: number): GameState {
+    const newRoadObjects = gameState.roadObjects.map(object => {
+        const speedScale = 1 + (1 - object.z / gameState.road.length) * 2;
+        const newZ = object.z - (2 * speedScale * deltaTime * 30);
 
-        // Reset pothole when it gets too close
         if (newZ < 0) {
-            // Place the pothole at a random z between 80% and 100% of road length
             const newZ = getRandomZ(gameState.road.length, 0.8, 1.0);
-            // Generate random x position within road bounds
-            const randomX = getRandomRoadX(100); // Using base road width of 100
+            const randomX = getRandomRoadX(100);
             return {
-                ...pothole,
-                id: generateRandomId('pothole'),
+                ...object,
+                id: generateRandomId(object.type),
                 x: randomX,
                 z: newZ
             };
         }
 
         return {
-            ...pothole,
+            ...object,
             z: newZ
         };
     });
 
-    // Check for pothole collisions
     const bikeZ = gameState.bike.z;
     const bikeX = gameState.bike.x;
     let newHealth = gameState.health;
-    const newCollidedPotholeIds = [...gameState.collidedPotholeIds];
+    const newCollidedRoadObjectIds = [...gameState.collidedRoadObjectIds];
+    const newPlayers = [...gameState.players];
     const healthLossPerHit = 20;
 
-    newPotholes.forEach(pothole => {
-        if (!newCollidedPotholeIds.includes(pothole.id)) {
+    newRoadObjects.forEach(object => {
+        if (!newCollidedRoadObjectIds.includes(object.id)) {
             const tolerance = 20;
             const isColliding =
-                Math.abs(bikeZ - pothole.z) < tolerance &&
-                Math.abs(bikeX - pothole.x) < tolerance;
+                Math.abs(bikeZ - object.z) < tolerance &&
+                Math.abs(bikeX - object.x) < tolerance;
 
             if (isColliding) {
-                newCollidedPotholeIds.push(pothole.id);
-                newHealth = Math.max(0, newHealth - healthLossPerHit);
+                console.log('Bike collided with', object.type);
+                newCollidedRoadObjectIds.push(object.id);
+
+                if (object.type === 'pothole') {
+                    newHealth = Math.max(0, newHealth - healthLossPerHit);
+                } else if (object.type === 'pedestrian') {
+                    // Check if any player is already in operation minigame
+                    const anyoneInOperation = newPlayers.some(p => p.location === 'operation-minigame');
+                    console.log('Anyone in operation', anyoneInOperation);
+
+                    if (!anyoneInOperation) {
+                        // Find a random player on the bike to move to operation
+                        const bikePlayers = newPlayers.filter(p => p.location === 'bike');
+
+                        if (bikePlayers.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * bikePlayers.length);
+                            const selectedPlayer = bikePlayers[randomIndex];
+                            const playerIndex = newPlayers.findIndex(p => p.id === selectedPlayer.id);
+                            console.log('Selected player for opperation', selectedPlayer);
+                            newPlayers[playerIndex] = {
+                                ...selectedPlayer,
+                                location: 'operation-minigame'
+                            };
+                        }
+                    }
+                }
             }
         }
     });
 
     return {
-        potholes: newPotholes,
+        ...gameState,
+        roadObjects: newRoadObjects,
         health: newHealth,
-        collidedPotholeIds: newCollidedPotholeIds
-    };
-}
-
-export function updateBikePosition(gameState: GameState, deltaTime: number): BikeState {
-    // Calculate X movement based on press counts
-    let newX = gameState.bike.x;
-    if (gameState.bike.leftPressCount > 0 || gameState.bike.rightPressCount > 0) {
-        const baseSpeed = gameState.bike.turnSpeed;
-        const leftSpeed = gameState.bike.leftPressCount * baseSpeed * deltaTime * 30;
-        const rightSpeed = gameState.bike.rightPressCount * baseSpeed * deltaTime * 30;
-        const netMovement = rightSpeed - leftSpeed;
-
-        // Update x position relative to road width (0-100)
-        newX = Math.max(0, Math.min(100, newX + netMovement));
-    }
-
-    // Calculate forward/backward movement
-    let newSpeed = gameState.bike.speed;
-    const acceleration = 5.0;
-    const deceleration = 3.0;
-    const accDiff = acceleration * deltaTime * 30;
-
-    if (gameState.bike.upPressCount > 0) {
-        newSpeed = Math.min(gameState.bike.maxSpeed, newSpeed + accDiff);
-    } else if (gameState.bike.downPressCount > 0) {
-        newSpeed = Math.max(-gameState.bike.maxSpeed / 2, newSpeed - accDiff);
-    } else {
-        // Apply deceleration when no keys are pressed
-        if (Math.abs(newSpeed) < deceleration * deltaTime * 30) {
-            newSpeed = 0;
-        } else {
-            newSpeed -= Math.sign(newSpeed) * deceleration * deltaTime * 30;
-        }
-    }
-
-    // Calculate bike's z position (20% of road length)
-    const bikeZ = gameState.road.length * 0.2;
-
-    return {
-        ...gameState.bike,
-        x: newX,
-        z: bikeZ,
-        speed: newSpeed
+        collidedRoadObjectIds: newCollidedRoadObjectIds,
+        players: newPlayers
     };
 }
 
 export const createInitialGameState = (): GameState => ({
     bike: {
-        x: 50,  // Start in middle of road
-        z: 0,   // Start at beginning of road
-        width: 10,  // Relative to road width
+        x: 50,
+        z: 0,
+        width: 10,
         height: 6,
         speed: 0,
         maxSpeed: 100,
-        turnSpeed: 2,  // Reduced for relative coordinates
+        turnSpeed: 2,
         isColliding: false,
         leftPressCount: 0,
         rightPressCount: 0,
@@ -310,7 +340,7 @@ export const createInitialGameState = (): GameState => ({
         downPressCount: 0
     },
     road: {
-        width: 100, // Base road width (will be scaled up at bottom)
+        width: 100,
         length: 2000,
         topY: 100
     },
@@ -320,12 +350,12 @@ export const createInitialGameState = (): GameState => ({
         { id: 'building_2', side: 'left', width: 120, height: 180, z: 1200, type: 'dogStore' },
         { id: 'building_3', side: 'right', width: 140, height: 220, z: 1600, type: 'park' }
     ],
-    potholes: [
-        { id: 'pothole_0', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.1, 0.2) },
-        { id: 'pothole_1', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.3, 0.4) },
-        { id: 'pothole_2', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.5, 0.6) },
-        { id: 'pothole_3', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.7, 0.8) },
-        { id: 'pothole_4', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.9, 1.0) }
+    roadObjects: [
+        { id: 'pothole_0', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.1, 0.2) },
+        { id: 'pothole_1', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.3, 0.4) },
+        { id: 'pothole_2', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.5, 0.6) },
+        { id: 'pedestrian_0', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.7, 0.8) },
+        { id: 'pedestrian_1', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.9, 1.0) }
     ],
     goals: {
         treatsCollected: 0,
@@ -334,7 +364,7 @@ export const createInitialGameState = (): GameState => ({
         isComplete: false
     },
     collidedBuildingIds: [],
-    collidedPotholeIds: [],
+    collidedRoadObjectIds: [],
     showDebugHitboxes: false,
     players: [],
     isGameStarted: false,
@@ -344,3 +374,44 @@ export const createInitialGameState = (): GameState => ({
     score: 0,
     lastUpdateTime: Date.now()
 });
+
+export function finishOperationMinigame(gameState: GameState, playerId: string, endState: OperationMinigameEndState): GameState {
+    const newPlayers = gameState.players.map(player => {
+        if (player.id === playerId && player.location === 'operation-minigame') {
+            return {
+                ...player,
+                location: 'bike' as PlayerLocation
+            };
+        }
+        return player;
+    });
+
+    return {
+        ...gameState,
+        players: newPlayers,
+        score: gameState.score + endState.score
+    };
+}
+
+export function addPlayer(gameState: GameState, player: Player): GameState {
+    return {
+        ...gameState,
+        players: [...gameState.players, player]
+    };
+}
+
+export function removePlayer(gameState: GameState, playerId: string): GameState {
+    return {
+        ...gameState,
+        players: gameState.players.filter(p => p.id !== playerId)
+    };
+}
+
+export function createNewPlayer(name: string): Player {
+    return {
+        id: Math.random().toString(36).substring(7),
+        name,
+        isReady: false,
+        location: 'bike'
+    };
+}

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { GameState, createInitialGameState } from '@shared/GameState';
+import { GameState, createInitialGameState, PlayerLocation } from '@shared/GameState';
 import { WebSocketManager } from '../services/WebSocketManager';
 import { ClientGame } from '../game/ClientGame';
+import { GameRenderer } from './GameRenderer';
 import { GoalsPanel } from '../components/GoalsPanel';
+import { OperationGame } from './OperationGame';
 import './GameCanvas.css';
 
 interface PlayerPanelProps {
@@ -11,12 +13,14 @@ interface PlayerPanelProps {
 
 interface ScoreDisplayProps {
     score: number;
+    playerName: string;
 }
 
-const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score }) => {
+const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, playerName }) => {
     return (
         <div className="score-display">
             <h2>Score: {score}</h2>
+            <p className="player-name">Playing as: {playerName}</p>
         </div>
     );
 };
@@ -42,13 +46,43 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({ players }) => {
 
 interface GameCanvasProps {
     wsManager: WebSocketManager;
+    playerName: string;
 }
 
-export const GameCanvas = ({ wsManager }: GameCanvasProps) => {
+const BikeView: React.FC<{
+    canvasRef: React.RefObject<HTMLCanvasElement>,
+    score: number,
+    playerName: string,
+    players: GameState['players'],
+    goals: GameState['goals']
+}> = ({ canvasRef, score, playerName, players, goals }) => {
+    return (
+        <>
+            <ScoreDisplay score={score} playerName={playerName} />
+            <canvas
+                ref={canvasRef}
+                className="game-canvas"
+            />
+            <PlayerPanel players={players} />
+            <GoalsPanel goals={goals} />
+        </>
+    );
+};
+
+export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const rendererRef = useRef<GameRenderer | null>(null);
     const gameRef = useRef<ClientGame | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
     const [gameState, setGameState] = useState<GameState>(createInitialGameState());
-    const [uiState, setUiState] = useState({ score: 0, players: [] as GameState['players'], goals: gameState.goals });
+    const [uiState, setUiState] = useState({
+        score: 0,
+        players: [] as GameState['players'],
+        goals: gameState.goals
+    });
+
+    // Get current player's location
+    const currentPlayerLocation = gameState.players.find(p => p.name === playerName)?.location || 'bike';
 
     // Update UI state at 10Hz
     useEffect(() => {
@@ -66,50 +100,72 @@ export const GameCanvas = ({ wsManager }: GameCanvasProps) => {
         return () => clearInterval(interval);
     }, []);
 
+    const renderLoop = () => {
+        // Only render bike view if player is on bike
+        if (currentPlayerLocation === 'bike' && gameRef.current && rendererRef.current) {
+            rendererRef.current.render(gameRef.current.getGameState());
+        }
+
+        animationFrameRef.current = requestAnimationFrame(renderLoop);
+    };
+
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+        // Only setup canvas and renderer if player is on bike
+        if (currentPlayerLocation === 'bike') {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
 
-        // Set canvas dimensions
-        canvas.width = 1200;
-        canvas.height = 800;
+            // Set canvas dimensions
+            canvas.width = 1200;
+            canvas.height = 800;
 
-        // Initialize game if not already done
-        if (!gameRef.current) {
-            gameRef.current = new ClientGame(canvas, gameState, wsManager);
+            // Initialize renderer
+            rendererRef.current = new GameRenderer(canvas);
+
+            // Initialize game
+            if (!gameRef.current) {
+                gameRef.current = new ClientGame(gameState, wsManager);
+                gameRef.current.start(); // Start the game update loop
+            }
+
+            // Subscribe to game state updates
+            const unsubscribe = wsManager.onGameState((newState) => {
+                setGameState(newState);
+                gameRef.current?.updateGameState(newState);
+            });
+
+            // Setup controls
+            const cleanup = gameRef.current.setupControls();
+
+            // Start render loop
+            animationFrameRef.current = requestAnimationFrame(renderLoop);
+
+            return () => {
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                }
+                cleanup();
+                unsubscribe();
+                gameRef.current?.stop();
+                gameRef.current = null;
+                rendererRef.current = null;
+            };
         }
-
-        // Start game if not already started
-        if (gameRef.current && !gameRef.current.isGameStarted()) {
-            gameRef.current.start();
-        }
-
-        // Subscribe to game state updates
-        const unsubscribe = wsManager.onGameState((newState) => {
-            console.log("Server Game State", newState);
-            setGameState(newState);
-            gameRef.current?.updateGameState(newState);
-        });
-
-        // Setup controls
-        const cleanup = gameRef.current.setupControls();
-
-        return () => {
-            cleanup();
-            unsubscribe();
-            gameRef.current?.stop();
-        };
-    }, [wsManager]);
+    }, [wsManager, currentPlayerLocation]);
 
     return (
         <div className="game-container">
-            <ScoreDisplay score={uiState.score} />
-            <canvas
-                ref={canvasRef}
-                className="game-canvas"
-            />
-            <PlayerPanel players={uiState.players} />
-            <GoalsPanel goals={uiState.goals} />
+            {currentPlayerLocation === 'bike' ? (
+                <BikeView
+                    canvasRef={canvasRef}
+                    score={uiState.score}
+                    playerName={playerName}
+                    players={uiState.players}
+                    goals={uiState.goals}
+                />
+            ) : (
+                <OperationGame />
+            )}
         </div>
     );
 };

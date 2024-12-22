@@ -1,4 +1,4 @@
-import { GameState, Pothole, BuildingType, Building } from '@shared/GameState';
+import { GameState, RoadObject, BuildingType, Building } from '@shared/GameState';
 import { buildingImages } from './BuildingTypes';
 
 interface RoadDrawingData {
@@ -225,37 +225,76 @@ export class GameRenderer {
         sortedBuildings.forEach(building => this.drawBuilding(building, state));
     }
 
-    private drawPothole(pothole: Pothole, state: GameState) {
+    private drawRoadObject(object: RoadObject, state: GameState) {
         const coords = this.getRoadDrawingCoords(
-            pothole.x,
-            pothole.z,
-            pothole.width,
-            pothole.height,
+            object.x,
+            object.z,
+            object.width,
+            object.height,
             state
         );
 
-        // Draw the pothole
-        this.ctx.fillStyle = state.collidedPotholeIds.includes(pothole.id) ? '#ff0000' : '#0000ff';
-        this.ctx.fillRect(
-            coords.x,
-            coords.y,
-            coords.width,
-            coords.height
-        );
+        // Draw the road object based on type
+        if (object.type === 'pothole') {
+            // Draw pothole as a dark circle
+            this.ctx.fillStyle = state.collidedRoadObjectIds.includes(object.id) ? '#ff0000' : '#333333';
+            this.ctx.beginPath();
+            this.ctx.ellipse(
+                coords.x + coords.width / 2,
+                coords.y + coords.height / 2,
+                coords.width / 2,
+                coords.height / 2,
+                0,
+                0,
+                2 * Math.PI
+            );
+            this.ctx.fill();
+        } else if (object.type === 'pedestrian') {
+            // Draw pedestrian as a stick figure
+            this.ctx.strokeStyle = state.collidedRoadObjectIds.includes(object.id) ? '#ff0000' : '#000000';
+            this.ctx.lineWidth = 2;
+
+            // Head
+            const headRadius = coords.width / 3;
+            this.ctx.beginPath();
+            this.ctx.arc(
+                coords.x + coords.width / 2,
+                coords.y + headRadius,
+                headRadius,
+                0,
+                2 * Math.PI
+            );
+            this.ctx.stroke();
+
+            // Body
+            this.ctx.beginPath();
+            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + headRadius * 2);
+            this.ctx.lineTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+            this.ctx.stroke();
+
+            // Arms
+            this.ctx.beginPath();
+            this.ctx.moveTo(coords.x, coords.y + coords.height / 2);
+            this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height / 2);
+            this.ctx.stroke();
+
+            // Legs
+            this.ctx.beginPath();
+            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+            this.ctx.lineTo(coords.x, coords.y + coords.height);
+            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+            this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height);
+            this.ctx.stroke();
+        }
 
         // Always draw coordinates for debugging
         this.ctx.fillStyle = '#ffffff';
         this.ctx.font = '12px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.fillText(
-            `X: ${Math.round(pothole.x)}, Z: ${Math.round(pothole.z)}`,
+            `${object.type} (${Math.round(object.z)}m)`,
             coords.x + coords.width/2,
-            coords.y
-        );
-        this.ctx.fillText(
-            `Screen: (${Math.round(coords.x)}, ${Math.round(coords.y)})`,
-            coords.x + coords.width/2,
-            coords.y - 15
+            coords.y - 5
         );
 
         // Draw hitbox if debug mode is on
@@ -265,15 +304,15 @@ export class GameRenderer {
                 coords.y,
                 coords.width,
                 coords.height,
-                `Pothole ${pothole.id}`
+                `${object.type} ${object.id}`
             );
         }
     }
 
-    private drawPotholes(state: GameState) {
-        // Sort potholes by z (furthest first)
-        const sortedPotholes = [...state.potholes].sort((a, b) => b.z - a.z);
-        sortedPotholes.forEach(pothole => this.drawPothole(pothole, state));
+    private drawRoadObjects(state: GameState) {
+        // Sort road objects by z (furthest first)
+        const sortedObjects = [...state.roadObjects].sort((a, b) => b.z - a.z);
+        sortedObjects.forEach(object => this.drawRoadObject(object, state));
     }
 
     private drawHealthBar(state: GameState) {
@@ -320,7 +359,7 @@ export class GameRenderer {
 
         // Draw game elements
         this.drawRoad(state);
-        this.drawPotholes(state);
+        this.drawRoadObjects(state);
         this.drawBuildings(state);
         this.drawBike(state);
         this.drawHealthBar(state);
