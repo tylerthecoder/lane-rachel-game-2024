@@ -4,7 +4,7 @@ import { BuildingType } from "@shared/GameState";
 export const buildingImages: Record<BuildingType, string> = {
   restaurant: '/buildings/restraunt.webp',
   pokemon: '/buildings/restraunt.webp',
-  dogStore: '/buildings/restraunt.webp',
+  dogStore: '/buildings/pet-store.png',
   park: '/buildings/restraunt.webp',
   house: '/buildings/restraunt.webp',
 };

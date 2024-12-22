@@ -14,6 +14,7 @@ const PIECES = {
 };
 
 type PieceType = keyof typeof PIECES;
+type Screen = 'intro' | 'game' | 'end';
 
 interface GamePiece {
     type: PieceType;
@@ -22,10 +23,9 @@ interface GamePiece {
     shape: number[][];
 }
 
-interface OperationGameState {
+interface GameState {
     board: number[][];
     currentPiece: GamePiece | null;
-    gameOver: boolean;
     score: number;
 }
 
@@ -33,21 +33,63 @@ const BOARD_WIDTH = 5;
 const BOARD_HEIGHT = 10;
 const CRITICAL_HEIGHT = 5;
 const CELL_SIZE = 40;
-const GAME_SPEED = 500; // 500ms per move
+const GAME_SPEED = 500;
 
-interface OperationGameProps {
-    wsManager: WebSocketManager;
-    playerId: string;
+interface IntroScreenProps {
     playerName: string;
+    onStart: () => void;
 }
 
-export const OperationGame = ({ wsManager, playerId, playerName }: OperationGameProps) => {
+const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart }) => {
+    return (
+        <div className="operation-start-screen">
+            <h1>Emergency Surgery!</h1>
+            <h2>Playing as: {playerName}</h2>
+            <div className="operation-instructions">
+                <p>Oh no! You hit a pedestrian!</p>
+                <p>Quick, perform emergency surgery using this totally accurate medical simulation.</p>
+                <h3>How to Play:</h3>
+                <ul>
+                    <li>Use ← and → arrow keys to move the pieces</li>
+                    <li>Fill as much of the bottom 5x5 grid as possible</li>
+                    <li>Don't let pieces stack above the red line!</li>
+                </ul>
+            </div>
+            <button className="start-button" onClick={onStart}>
+                Start Surgery
+            </button>
+        </div>
+    );
+};
+
+interface EndScreenProps {
+    score: number;
+    onContinue: () => void;
+}
+
+const EndScreen: React.FC<EndScreenProps> = ({ score, onContinue }) => {
+    return (
+        <div className="game-over-screen">
+            <h1>Surgery Complete!</h1>
+            <p>Success Rate: {score}%</p>
+            <button className="continue-button" onClick={onContinue}>
+                Continue
+            </button>
+        </div>
+    );
+};
+
+interface GameScreenProps {
+    playerName: string;
+    onGameOver: (score: number) => void;
+}
+
+const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number | null>(null);
-    const [gameState, setGameState] = useState<OperationGameState>({
+    const [gameState, setGameState] = useState<GameState>({
         board: Array(BOARD_HEIGHT).fill(0).map(() => Array(BOARD_WIDTH).fill(0)),
         currentPiece: null,
-        gameOver: false,
         score: 0
     });
 
@@ -98,16 +140,8 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
         return Math.round((filledCells / (CRITICAL_HEIGHT * BOARD_WIDTH)) * 100);
     };
 
-    const handleContinue = () => {
-        wsManager.sendMessage({
-            type: 'finishOperation',
-            score: gameState.score,
-            playerId: playerId
-        });
-    };
-
     const draw = (ctx: CanvasRenderingContext2D) => {
-        const { board, currentPiece, gameOver } = gameState;
+        const { board, currentPiece } = gameState;
 
         // Clear canvas
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -147,7 +181,7 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
         });
 
         // Draw current piece
-        if (currentPiece && !gameOver) {
+        if (currentPiece) {
             ctx.fillStyle = '#4CAF50';
             currentPiece.shape.forEach((row, y) => {
                 row.forEach((cell, x) => {
@@ -166,7 +200,7 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
 
     const moveDown = () => {
         setGameState(prevState => {
-            if (!prevState.currentPiece || prevState.gameOver) return prevState;
+            if (!prevState.currentPiece) return prevState;
 
             const piece = { ...prevState.currentPiece, y: prevState.currentPiece.y - 1 };
 
@@ -177,12 +211,9 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
 
                 if (pieceMaxHeight > CRITICAL_HEIGHT) {
                     // Game over
-                    return {
-                        ...prevState,
-                        board: newBoard,
-                        gameOver: true,
-                        score: calculateScore(newBoard)
-                    };
+                    const finalScore = calculateScore(newBoard);
+                    onGameOver(finalScore);
+                    return prevState;
                 }
 
                 return {
@@ -201,7 +232,7 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
 
     const movePiece = (dx: number) => {
         setGameState(prevState => {
-            if (!prevState.currentPiece || prevState.gameOver) return prevState;
+            if (!prevState.currentPiece) return prevState;
 
             const newPiece = {
                 ...prevState.currentPiece,
@@ -276,22 +307,49 @@ export const OperationGame = ({ wsManager, playerId, playerName }: OperationGame
 
     return (
         <div className="operation-game-container">
-            <h1>Operation</h1>
-            <h2> Playing as {playerName}</h2>
+            <h1>Emergency Surgery</h1>
+            <h2>Playing as: {playerName}</h2>
             <canvas
                 ref={canvasRef}
                 className="operation-canvas"
-                style={{ display: gameState.gameOver ? 'none' : 'block' }}
             />
-            {gameState.gameOver && (
-                <div className="game-over-screen">
-                    <h1>Game Over</h1>
-                    <p>Score: {gameState.score}%</p>
-                    <button className="continue-button" onClick={handleContinue}>
-                        Continue
-                    </button>
-                </div>
-            )}
         </div>
     );
+};
+
+interface OperationGameProps {
+    wsManager: WebSocketManager;
+    playerId: string;
+    playerName: string;
+}
+
+export const OperationGame: React.FC<OperationGameProps> = ({ wsManager, playerId, playerName }) => {
+    const [currentScreen, setCurrentScreen] = useState<Screen>('intro');
+    const [finalScore, setFinalScore] = useState(0);
+
+    const handleStartGame = () => {
+        setCurrentScreen('game');
+    };
+
+    const handleGameOver = (score: number) => {
+        setFinalScore(score);
+        setCurrentScreen('end');
+    };
+
+    const handleContinue = () => {
+        wsManager.sendMessage({
+            type: 'finishOperation',
+            score: finalScore,
+            playerId: playerId
+        });
+    };
+
+    switch (currentScreen) {
+        case 'intro':
+            return <IntroScreen playerName={playerName} onStart={handleStartGame} />;
+        case 'game':
+            return <GameScreen playerName={playerName} onGameOver={handleGameOver} />;
+        case 'end':
+            return <EndScreen score={finalScore} onContinue={handleContinue} />;
+    }
 };

@@ -34,7 +34,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onStartGame }) => {
 
   return (
     <div className="home-screen">
-      <h1>Lane & Rachel's Tandem Bike Adventure</h1>
+      <h1>Siems Christmas Adventure</h1>
       <p className="game-tagline">Work together to control a tandem bike!</p>
       <form onSubmit={handleSubmit} className="name-form">
         <input

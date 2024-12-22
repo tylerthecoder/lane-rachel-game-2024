@@ -3,43 +3,60 @@ import { GameState, createInitialGameState } from '@shared/GameState';
 import { WebSocketManager } from '../services/WebSocketManager';
 import { ClientGame } from '../game/ClientGame';
 import { GameRenderer } from './GameRenderer';
-import { GoalsPanel } from '../components/GoalsPanel';
 import { OperationGame } from './OperationGame';
 import './GameCanvas.css';
 
-interface PlayerPanelProps {
+interface StatsDisplayProps {
+    stats: GameState['stats'];
+    score: number;
+    playerName: string;
     players: GameState['players'];
 }
 
-interface ScoreDisplayProps {
-    score: number;
-    playerName: string;
-}
-
-const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, playerName }) => {
+const StatsDisplay: React.FC<StatsDisplayProps> = ({ stats, score, playerName, players }) => {
     return (
-        <div className="score-display">
+        <div className="stats-display">
             <h2>Score: {score}</h2>
             <p className="player-name">Playing as: {playerName}</p>
-        </div>
-    );
-};
 
-const PlayerPanel: React.FC<PlayerPanelProps> = ({ players }) => {
-    return (
-        <div className="player-panel">
-            <h2>Active Players</h2>
-            {players.map(player => (
-                <div key={player.id} className="player-item">
-                    <span className="player-icon">👤</span>
-                    <span className="player-text">
-                        {player.name}
-                        <span className="player-status">
-                            {player.isReady ? ' (Ready)' : ' (Not Ready)'}
-                        </span>
+            <div className="stats-list">
+                <div className="stat-item">
+                    <span className="stat-icon">🍽️</span>
+                    <span className="stat-text">
+                        Restaurants: {stats.restaurantsVisited.length}
                     </span>
                 </div>
-            ))}
+                <div className="stat-item">
+                    <span className="stat-icon">🦴</span>
+                    <span className="stat-text">
+                        Treats: {stats.treatsCollected}
+                    </span>
+                </div>
+                <div className="stat-item">
+                    <span className="stat-icon">🚶</span>
+                    <span className="stat-text">
+                        Pedestrians: {stats.pedestriansHit}
+                    </span>
+                </div>
+                <div className="stat-item">
+                    <span className="stat-icon">🕳️</span>
+                    <span className="stat-text">
+                        Potholes: {stats.potholesHit}
+                    </span>
+                </div>
+            </div>
+
+            <div className="players-list">
+                <h3>Active Players</h3>
+                {players.map(player => (
+                    <div key={player.id} className="player-item">
+                        <span className="player-icon">👤</span>
+                        <span className="player-text">
+                            {player.name}
+                        </span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
@@ -51,22 +68,23 @@ interface GameCanvasProps {
 
 const BikeView: React.FC<{
     canvasRef: React.RefObject<HTMLCanvasElement>,
-    score: number,
-    playerName: string,
-    players: GameState['players'],
-    goals: GameState['goals']
-}> = ({ canvasRef, score, playerName, players, goals }) => {
+    gameState: GameState,
+    playerName: string
+}> = ({ canvasRef, gameState, playerName }) => {
     return (
         <>
-            <ScoreDisplay score={score} playerName={playerName} />
+            <StatsDisplay
+                stats={gameState.stats}
+                score={gameState.score}
+                playerName={playerName}
+                players={gameState.players}
+            />
             <canvas
                 ref={canvasRef}
                 width={1200}
                 height={800}
                 className="game-canvas"
             />
-            <PlayerPanel players={players} />
-            <GoalsPanel goals={goals} />
         </>
     );
 };
@@ -77,32 +95,11 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
     const gameRef = useRef<ClientGame | null>(null);
     const animationFrameRef = useRef<number | null>(null);
     const [gameState, setGameState] = useState<GameState>(createInitialGameState());
-    const [uiState, setUiState] = useState({
-        score: 0,
-        players: [] as GameState['players'],
-        goals: gameState.goals
-    });
 
     const playerId = gameState.players.find(p => p.name === playerName)?.id;
 
     // Get current player's location
     const currentPlayerLocation = gameState.players.find(p => p.name === playerName)?.location || 'bike';
-
-    // Update UI state at 10Hz
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (gameRef.current) {
-                const currentState = gameRef.current.getGameState();
-                setUiState({
-                    score: currentState.score,
-                    players: currentState.players,
-                    goals: currentState.goals
-                });
-            }
-        }, 100); // 10 times per second
-
-        return () => clearInterval(interval);
-    }, []);
 
     const renderLoop = () => {
         // Only render bike view if player is on bike
@@ -112,7 +109,6 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
             }
             rendererRef.current.render(gameRef.current.getGameState());
         }
-
 
         animationFrameRef.current = requestAnimationFrame(renderLoop);
     };
@@ -167,10 +163,8 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
             {currentPlayerLocation === 'bike' ? (
                 <BikeView
                     canvasRef={canvasRef}
-                    score={uiState.score}
+                    gameState={gameState}
                     playerName={playerName}
-                    players={uiState.players}
-                    goals={uiState.goals}
                 />
             ) : (
                 <OperationGame

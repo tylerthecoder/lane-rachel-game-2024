@@ -322,44 +322,6 @@ export class GameRenderer {
         sortedObjects.forEach(object => this.drawRoadObject(object, state));
     }
 
-    private drawHealthBar(state: GameState) {
-        const barWidth = 200;
-        const barHeight = 20;
-        const padding = 10;
-        const x = padding;
-        const y = padding;
-
-        // Draw background
-        this.ctx.fillStyle = '#333333';
-        this.ctx.fillRect(x, y, barWidth, barHeight);
-
-        // Draw health
-        const healthWidth = (state.health / state.maxHealth) * barWidth;
-        this.ctx.fillStyle = this.getHealthColor(state.health / state.maxHealth);
-        this.ctx.fillRect(x, y, healthWidth, barHeight);
-
-        // Draw border
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(x, y, barWidth, barHeight);
-
-        // Draw text
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '14px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText(
-            `Health: ${Math.round(state.health)}/${state.maxHealth}`,
-            x + barWidth / 2,
-            y + barHeight / 2 + 5
-        );
-    }
-
-    private getHealthColor(percentage: number): string {
-        if (percentage > 0.6) return '#00ff00'; // Green
-        if (percentage > 0.3) return '#ffff00'; // Yellow
-        return '#ff0000'; // Red
-    }
-
     public render(state: GameState) {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -369,6 +331,5 @@ export class GameRenderer {
         this.drawRoadObjects(state);
         this.drawBuildings(state);
         this.drawBike(state);
-        this.drawHealthBar(state);
     }
 }

@@ -24,11 +24,11 @@ export interface RoadDimensions {
     topY: number;
 }
 
-export interface GameGoals {
+export interface GameStats {
+    restaurantsVisited: string[];  // Array of restaurant IDs
     treatsCollected: number;
-    pokemonCaught: number;
-    restaurantsVisited: string[];
-    isComplete: boolean;
+    pedestriansHit: number;
+    potholesHit: number;
 }
 
 export type BuildingType = 'restaurant' | 'pokemon' | 'dogStore' | 'park' | 'house';
@@ -72,7 +72,7 @@ export interface GameState {
     road: RoadDimensions;
     buildings: Building[];
     roadObjects: RoadObject[];
-    goals: GameGoals;
+    stats: GameStats;  // Replace goals with stats
     collidedBuildingIds: string[];
     collidedRoadObjectIds: string[];
     showDebugHitboxes: boolean;
@@ -133,6 +133,174 @@ function generateRandomId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
+export function spawnNewObjects(state: GameState): GameState {
+    const newState = { ...state };
+    const spawnChance = 0.05;
+
+    if (Math.random() < spawnChance) {
+        // Decide what to spawn
+        const spawnType = Math.random();
+
+        if (spawnType < 0.4) { // 40% chance for building
+            const types: BuildingType[] = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            const side = Math.random() < 0.5 ? 'left' : 'right';
+            const width = 100 + Math.random() * 50;
+            const height = 180 + Math.random() * 70;
+
+            const newBuilding: Building = {
+                id: generateRandomId('building'),
+                side,
+                width,
+                height,
+                z: state.road.length,
+                type
+            };
+
+            newState.buildings = [...state.buildings, newBuilding];
+        } else if (spawnType < 0.7) { // 30% chance for pothole
+            const newPothole: RoadObject = {
+                id: generateRandomId('pothole'),
+                type: 'pothole',
+                x: getRandomRoadX(100),
+                width: 40,
+                height: 40,
+                z: state.road.length
+            };
+
+            newState.roadObjects = [...state.roadObjects, newPothole];
+        } else { // 30% chance for pedestrian
+            const newPedestrian: RoadObject = {
+                id: generateRandomId('pedestrian'),
+                type: 'pedestrian',
+                x: getRandomRoadX(100),
+                width: 30,
+                height: 60,
+                z: state.road.length
+            };
+
+            newState.roadObjects = [...state.roadObjects, newPedestrian];
+        }
+    }
+
+    // Clean up objects that are too far behind
+    newState.buildings = newState.buildings.filter(building => building.z > -50);
+    newState.roadObjects = newState.roadObjects.filter(object => object.z > -50);
+
+    return newState;
+}
+
+export function updateBuildings(gameState: GameState, deltaTime: number): GameState {
+    const newState = { ...gameState };
+    const newBuildings = gameState.buildings.map(building => {
+        // Move building closer with increasing speed as it gets closer
+        const speedScale = 1 + (1 - building.z / gameState.road.length) * 2;
+        const newZ = building.z - (2 * speedScale * deltaTime * 30);
+        return { ...building, z: newZ };
+    });
+
+    // Check for building collisions
+    const bikeZ = gameState.bike.z;
+    const bikeX = gameState.bike.x;
+    let newScore = gameState.score;
+    const newCollidedBuildingIds = [...gameState.collidedBuildingIds];
+    const newStats = { ...gameState.stats };
+
+    newBuildings.forEach(building => {
+        if (!newCollidedBuildingIds.includes(building.id)) {
+            const tolerance = 20;
+            const isColliding =
+                Math.abs(bikeZ - building.z) < tolerance &&
+                ((building.side === 'left' && bikeX < 20) ||
+                 (building.side === 'right' && bikeX > 80));
+
+            if (isColliding) {
+                newCollidedBuildingIds.push(building.id);
+
+                // Update stats based on building type
+                switch (building.type) {
+                    case 'restaurant':
+                        if (!newStats.restaurantsVisited.includes(building.id)) {
+                            newStats.restaurantsVisited.push(building.id);
+                        }
+                        break;
+                    case 'dogStore':
+                        newStats.treatsCollected++;
+                        break;
+                }
+            }
+        }
+    });
+
+    return {
+        ...newState,
+        buildings: newBuildings,
+        score: newScore,
+        stats: newStats,
+        collidedBuildingIds: newCollidedBuildingIds
+    };
+}
+
+export function updateRoadObjects(gameState: GameState, deltaTime: number): GameState {
+    const newState = { ...gameState };
+    const newRoadObjects = gameState.roadObjects.map(object => {
+        const speedScale = 1 + (1 - object.z / gameState.road.length) * 2;
+        const newZ = object.z - (2 * speedScale * deltaTime * 30);
+        return { ...object, z: newZ };
+    });
+
+    // Check for collisions
+    const bikeZ = gameState.bike.z;
+    const bikeX = gameState.bike.x;
+    let newHealth = gameState.health;
+    const newCollidedRoadObjectIds = [...gameState.collidedRoadObjectIds];
+    const newPlayers = [...gameState.players];
+    const healthLossPerHit = 20;
+    const newStats = { ...gameState.stats };
+
+    newRoadObjects.forEach(object => {
+        if (!newCollidedRoadObjectIds.includes(object.id)) {
+            const tolerance = 20;
+            const isColliding =
+                Math.abs(bikeZ - object.z) < tolerance &&
+                Math.abs(bikeX - object.x) < tolerance;
+
+            if (isColliding) {
+                newCollidedRoadObjectIds.push(object.id);
+
+                if (object.type === 'pothole') {
+                    newStats.potholesHit++;
+                    newHealth = Math.max(0, newHealth - healthLossPerHit);
+                } else if (object.type === 'pedestrian') {
+                    newStats.pedestriansHit++;
+                    const anyoneInOperation = newPlayers.some(p => p.location === 'operation-minigame');
+
+                    if (!anyoneInOperation) {
+                        const bikePlayers = newPlayers.filter(p => p.location === 'bike');
+                        if (bikePlayers.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * bikePlayers.length);
+                            const selectedPlayer = bikePlayers[randomIndex];
+                            const playerIndex = newPlayers.findIndex(p => p.id === selectedPlayer.id);
+                            newPlayers[playerIndex] = {
+                                ...selectedPlayer,
+                                location: 'operation-minigame'
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return {
+        ...newState,
+        roadObjects: newRoadObjects,
+        health: newHealth,
+        collidedRoadObjectIds: newCollidedRoadObjectIds,
+        players: newPlayers,
+        stats: newStats
+    };
+}
 export function updateBikePosition(gameState: GameState, deltaTime: number): GameState {
     // Calculate X movement based on press counts
     let newX = gameState.bike.x;
@@ -179,153 +347,6 @@ export function updateBikePosition(gameState: GameState, deltaTime: number): Gam
     };
 }
 
-export function updateBuildings(gameState: GameState, deltaTime: number): GameState {
-    const newBuildings = gameState.buildings.map(building => {
-        // Move building closer with increasing speed as it gets closer
-        const speedScale = 1 + (1 - building.z / gameState.road.length) * 2;
-        const newZ = building.z - (2 * speedScale * deltaTime * 30);
-
-        // Reset building when it gets too close
-        if (newZ < 0) {
-            const types: BuildingType[] = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'];
-            return {
-                ...building,
-                id: generateRandomId('building'),
-                z: gameState.road.length,
-                type: types[Math.floor(Math.random() * types.length)]
-            };
-        }
-
-        return {
-            ...building,
-            z: newZ
-        };
-    });
-
-    // Check for building collisions
-    const bikeZ = gameState.bike.z;
-    const bikeX = gameState.bike.x;
-    let newScore = gameState.score;
-    const newCollidedBuildingIds = [...gameState.collidedBuildingIds];
-    const newGoals = { ...gameState.goals };
-
-    newBuildings.forEach(building => {
-        if (!newCollidedBuildingIds.includes(building.id)) {
-            const tolerance = 20;
-            const isColliding =
-                Math.abs(bikeZ - building.z) < tolerance &&
-                ((building.side === 'left' && bikeX < 20) ||
-                 (building.side === 'right' && bikeX > 80));
-
-            if (isColliding) {
-                newCollidedBuildingIds.push(building.id);
-
-                // Update score and goals based on building type
-                switch (building.type) {
-                    case 'house':
-                        newScore += 100;
-                        break;
-                    case 'restaurant':
-                        if (!newGoals.restaurantsVisited.includes(building.id)) {
-                            newGoals.restaurantsVisited.push(building.id);
-                        }
-                        break;
-                    case 'pokemon':
-                        newGoals.pokemonCaught++;
-                        break;
-                    case 'dogStore':
-                        newGoals.treatsCollected++;
-                        break;
-                }
-            }
-        }
-    });
-
-    return {
-        ...gameState,
-        buildings: newBuildings,
-        score: newScore,
-        goals: newGoals,
-        collidedBuildingIds: newCollidedBuildingIds
-    };
-}
-
-export function updateRoadObjects(gameState: GameState, deltaTime: number): GameState {
-    const newRoadObjects = gameState.roadObjects.map(object => {
-        const speedScale = 1 + (1 - object.z / gameState.road.length) * 2;
-        const newZ = object.z - (2 * speedScale * deltaTime * 30);
-
-        if (newZ < 0) {
-            const newZ = getRandomZ(gameState.road.length, 0.8, 1.0);
-            const randomX = getRandomRoadX(100);
-            return {
-                ...object,
-                id: generateRandomId(object.type),
-                x: randomX,
-                z: newZ
-            };
-        }
-
-        return {
-            ...object,
-            z: newZ
-        };
-    });
-
-    const bikeZ = gameState.bike.z;
-    const bikeX = gameState.bike.x;
-    let newHealth = gameState.health;
-    const newCollidedRoadObjectIds = [...gameState.collidedRoadObjectIds];
-    const newPlayers = [...gameState.players];
-    const healthLossPerHit = 20;
-
-    newRoadObjects.forEach(object => {
-        if (!newCollidedRoadObjectIds.includes(object.id)) {
-            const tolerance = 20;
-            const isColliding =
-                Math.abs(bikeZ - object.z) < tolerance &&
-                Math.abs(bikeX - object.x) < tolerance;
-
-            if (isColliding) {
-                console.log('Bike collided with', object.type);
-                newCollidedRoadObjectIds.push(object.id);
-
-                if (object.type === 'pothole') {
-                    newHealth = Math.max(0, newHealth - healthLossPerHit);
-                } else if (object.type === 'pedestrian') {
-                    // Check if any player is already in operation minigame
-                    const anyoneInOperation = newPlayers.some(p => p.location === 'operation-minigame');
-                    console.log('Anyone in operation', anyoneInOperation);
-
-                    if (!anyoneInOperation) {
-                        // Find a random player on the bike to move to operation
-                        const bikePlayers = newPlayers.filter(p => p.location === 'bike');
-
-                        if (bikePlayers.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * bikePlayers.length);
-                            const selectedPlayer = bikePlayers[randomIndex];
-                            const playerIndex = newPlayers.findIndex(p => p.id === selectedPlayer.id);
-                            console.log('Selected player for opperation', selectedPlayer);
-                            newPlayers[playerIndex] = {
-                                ...selectedPlayer,
-                                location: 'operation-minigame'
-                            };
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    return {
-        ...gameState,
-        roadObjects: newRoadObjects,
-        health: newHealth,
-        collidedRoadObjectIds: newCollidedRoadObjectIds,
-        players: newPlayers
-    };
-}
-
 export const createInitialGameState = (): GameState => ({
     bike: {
         x: 50,
@@ -359,11 +380,11 @@ export const createInitialGameState = (): GameState => ({
         { id: 'pedestrian_0', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.7, 0.8) },
         { id: 'pedestrian_1', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.9, 1.0) }
     ],
-    goals: {
-        treatsCollected: 0,
-        pokemonCaught: 0,
+    stats: {
         restaurantsVisited: [],
-        isComplete: false
+        treatsCollected: 0,
+        pedestriansHit: 0,
+        potholesHit: 0
     },
     collidedBuildingIds: [],
     collidedRoadObjectIds: [],

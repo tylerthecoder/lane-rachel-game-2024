@@ -11,7 +11,8 @@ import {
     createNewPlayer,
     addPlayer,
     removePlayer,
-    finishOperationMinigame
+    finishOperationMinigame,
+    spawnNewObjects
 } from '@shared/GameState';
 
 // Track game state
@@ -31,6 +32,7 @@ function updateGame(state: GameState): GameState {
     state = updateBikePosition(state, deltaTime);
     state = updateBuildings(state, deltaTime);
     state = updateRoadObjects(state, deltaTime);
+    state = spawnNewObjects(state);
 
     return state;
 }
@@ -180,7 +182,7 @@ const app = new Elysia()
             // Find and remove the disconnected player
             let disconnectedPlayerId: string | undefined;
             connections.forEach((conn, playerId) => {
-                if (conn.ws === ws) {
+                if (conn.ws.id === ws.id) {
                     disconnectedPlayerId = playerId;
                 }
             });
