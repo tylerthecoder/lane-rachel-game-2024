@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { WebSocketManager } from '../services/WebSocketManager';
 import './OperationGame.css';
 
 // Tetris piece shapes
@@ -34,7 +35,13 @@ const CRITICAL_HEIGHT = 5;
 const CELL_SIZE = 40;
 const GAME_SPEED = 500; // 500ms per move
 
-export const OperationGame = () => {
+interface OperationGameProps {
+    wsManager: WebSocketManager;
+    playerId: string;
+    playerName: string;
+}
+
+export const OperationGame = ({ wsManager, playerId, playerName }: OperationGameProps) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number | null>(null);
     const [gameState, setGameState] = useState<OperationGameState>({
@@ -89,6 +96,14 @@ export const OperationGame = () => {
         const filledCells = board.slice(0, CRITICAL_HEIGHT)
             .reduce((sum, row) => sum + row.filter(cell => cell === 1).length, 0);
         return Math.round((filledCells / (CRITICAL_HEIGHT * BOARD_WIDTH)) * 100);
+    };
+
+    const handleContinue = () => {
+        wsManager.sendMessage({
+            type: 'finishOperation',
+            score: gameState.score,
+            playerId: playerId
+        });
     };
 
     const draw = (ctx: CanvasRenderingContext2D) => {
@@ -146,19 +161,6 @@ export const OperationGame = () => {
                     }
                 });
             });
-        }
-
-        // Draw game over screen
-        if (gameOver) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-            ctx.fillStyle = 'white';
-            ctx.font = '48px "Press Start 2P"';
-            ctx.textAlign = 'center';
-            ctx.fillText('Game Over', ctx.canvas.width / 2, ctx.canvas.height / 2 - 50);
-            ctx.font = '24px "Press Start 2P"';
-            ctx.fillText(`Score: ${gameState.score}%`, ctx.canvas.width / 2, ctx.canvas.height / 2 + 50);
         }
     };
 
@@ -273,9 +275,23 @@ export const OperationGame = () => {
     }, [gameState]);
 
     return (
-        <canvas
-            ref={canvasRef}
-            className="operation-canvas"
-        />
+        <div className="operation-game-container">
+            <h1>Operation</h1>
+            <h2> Playing as {playerName}</h2>
+            <canvas
+                ref={canvasRef}
+                className="operation-canvas"
+                style={{ display: gameState.gameOver ? 'none' : 'block' }}
+            />
+            {gameState.gameOver && (
+                <div className="game-over-screen">
+                    <h1>Game Over</h1>
+                    <p>Score: {gameState.score}%</p>
+                    <button className="continue-button" onClick={handleContinue}>
+                        Continue
+                    </button>
+                </div>
+            )}
+        </div>
     );
 };

@@ -66,6 +66,7 @@ export interface OperationMinigameEndState {
     score: number;
 }
 
+
 export interface GameState {
     bike: BikeState;
     road: RoadDimensions;
@@ -98,7 +99,8 @@ export type ClientMessage =
     | { type: 'moveRight'; pressed: boolean }
     | { type: 'moveUp'; pressed: boolean }
     | { type: 'moveDown'; pressed: boolean }
-    | { type: 'ready' };
+    | { type: 'ready' }
+    | { type: 'finishOperation'; score: number, playerId: string };
 
 function getRandomZ(roadLength: number, minPercent: number = 0, maxPercent: number = 1): number {
     return roadLength * (minPercent + Math.random() * (maxPercent - minPercent));
@@ -372,7 +374,7 @@ export const createInitialGameState = (): GameState => ({
     health: 100,
     maxHealth: 100,
     score: 0,
-    lastUpdateTime: Date.now()
+    lastUpdateTime: Date.now(),
 });
 
 export function finishOperationMinigame(gameState: GameState, playerId: string, endState: OperationMinigameEndState): GameState {

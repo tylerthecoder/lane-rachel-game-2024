@@ -10,7 +10,8 @@ import {
     updateRoadObjects,
     createNewPlayer,
     addPlayer,
-    removePlayer
+    removePlayer,
+    finishOperationMinigame
 } from '@shared/GameState';
 
 // Track game state
@@ -154,6 +155,18 @@ const app = new Elysia()
                             };
                         }
                         broadcastGameState();
+                        break;
+
+                    case 'finishOperation':
+                        // Find the player who sent the message
+                        console.log('Finished operation minigame for player ID:', parsedMessage.playerId);
+
+                        if (parsedMessage.playerId) {
+                            gameState = finishOperationMinigame(gameState, parsedMessage.playerId, {
+                                score: parsedMessage.score
+                            });
+                            broadcastGameState();
+                        }
                         break;
                 }
             } catch (error) {

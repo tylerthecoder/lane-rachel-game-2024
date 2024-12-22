@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GameState, createInitialGameState, PlayerLocation } from '@shared/GameState';
+import { GameState, createInitialGameState } from '@shared/GameState';
 import { WebSocketManager } from '../services/WebSocketManager';
 import { ClientGame } from '../game/ClientGame';
 import { GameRenderer } from './GameRenderer';
@@ -61,6 +61,8 @@ const BikeView: React.FC<{
             <ScoreDisplay score={score} playerName={playerName} />
             <canvas
                 ref={canvasRef}
+                width={1200}
+                height={800}
                 className="game-canvas"
             />
             <PlayerPanel players={players} />
@@ -80,6 +82,8 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
         players: [] as GameState['players'],
         goals: gameState.goals
     });
+
+    const playerId = gameState.players.find(p => p.name === playerName)?.id;
 
     // Get current player's location
     const currentPlayerLocation = gameState.players.find(p => p.name === playerName)?.location || 'bike';
@@ -103,8 +107,12 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
     const renderLoop = () => {
         // Only render bike view if player is on bike
         if (currentPlayerLocation === 'bike' && gameRef.current && rendererRef.current) {
+            if (canvasRef.current) {
+                rendererRef.current.updateCanvas(canvasRef.current);
+            }
             rendererRef.current.render(gameRef.current.getGameState());
         }
+
 
         animationFrameRef.current = requestAnimationFrame(renderLoop);
     };
@@ -130,6 +138,7 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
 
             // Subscribe to game state updates
             const unsubscribe = wsManager.onGameState((newState) => {
+                console.log("ServerGameState", newState);
                 setGameState(newState);
                 gameRef.current?.updateGameState(newState);
             });
@@ -151,7 +160,7 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
                 rendererRef.current = null;
             };
         }
-    }, [wsManager, currentPlayerLocation]);
+    }, [wsManager]);
 
     return (
         <div className="game-container">
@@ -164,7 +173,11 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
                     goals={uiState.goals}
                 />
             ) : (
-                <OperationGame />
+                <OperationGame
+                    wsManager={wsManager}
+                    playerId={playerId ?? ""}
+                    playerName={playerName}
+                />
             )}
         </div>
     );
