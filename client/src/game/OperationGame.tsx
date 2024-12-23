@@ -38,26 +38,37 @@ const GAME_SPEED = 500;
 interface IntroScreenProps {
     playerName: string;
     onStart: () => void;
+    onSkip: () => void;
 }
 
-const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart }) => {
+const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart, onSkip }) => {
     return (
-        <div className="operation-start-screen">
-            <h1>Emergency Surgery!</h1>
-            <h2>Playing as: {playerName}</h2>
-            <div className="operation-instructions">
-                <p>Oh no! You hit a pedestrian!</p>
-                <p>Quick, perform emergency surgery using this totally accurate medical simulation.</p>
-                <h3>How to Play:</h3>
-                <ul>
-                    <li>Use ← and → arrow keys to move the pieces</li>
-                    <li>Fill as much of the bottom 5x5 grid as possible</li>
-                    <li>Don't let pieces stack above the red line!</li>
-                </ul>
+        <div className="game-container">
+            <div className="game-panel max-w-2xl mx-auto">
+                <h1 className="game-title">Emergency Surgery!</h1>
+                <h2 className="game-subtitle">Playing as: {playerName}</h2>
+                <div className="space-y-4 mb-8">
+                    <p className="game-text">Oh no! You hit a pedestrian!</p>
+                    <p className="game-text">Quick, perform emergency surgery using this totally accurate medical simulation.</p>
+                    <h3 className="text-game-green font-game mt-6 mb-4">How to Play:</h3>
+                    <ul className="space-y-2">
+                        <li className="game-text text-sm">Use ← and → arrow keys to move the pieces</li>
+                        <li className="game-text text-sm">Fill as much of the bottom 5x5 grid as possible</li>
+                        <li className="game-text text-sm">Don't let pieces stack above the red line!</li>
+                    </ul>
+                </div>
+                <div className="flex gap-4 justify-center">
+                    <button className="game-button" onClick={onStart}>
+                        Start Surgery
+                    </button>
+                    <button
+                        className="game-button !bg-gray-600 hover:!bg-gray-500"
+                        onClick={onSkip}
+                    >
+                        Skip Surgery (50% Success)
+                    </button>
+                </div>
             </div>
-            <button className="start-button" onClick={onStart}>
-                Start Surgery
-            </button>
         </div>
     );
 };
@@ -69,12 +80,14 @@ interface EndScreenProps {
 
 const EndScreen: React.FC<EndScreenProps> = ({ score, onContinue }) => {
     return (
-        <div className="game-over-screen">
-            <h1>Surgery Complete!</h1>
-            <p>Success Rate: {score}%</p>
-            <button className="continue-button" onClick={onContinue}>
-                Continue
-            </button>
+        <div className="game-container">
+            <div className="game-panel text-center">
+                <h1 className="game-title">Surgery Complete!</h1>
+                <p className="game-text mb-8">Success Rate: {score}%</p>
+                <button className="game-button" onClick={onContinue}>
+                    Continue
+                </button>
+            </div>
         </div>
     );
 };
@@ -306,12 +319,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
     }, [gameState]);
 
     return (
-        <div className="operation-game-container">
-            <h1>Emergency Surgery</h1>
-            <h2>Playing as: {playerName}</h2>
+        <div className="game-container">
+            <h1 className="game-title">Emergency Surgery</h1>
+            <h2 className="game-subtitle">Playing as: {playerName}</h2>
             <canvas
                 ref={canvasRef}
-                className="operation-canvas"
+                className="border-2 border-game-green rounded-lg"
             />
         </div>
     );
@@ -331,6 +344,16 @@ export const OperationGame: React.FC<OperationGameProps> = ({ wsManager, playerI
         setCurrentScreen('game');
     };
 
+    const handleSkip = () => {
+        const skipScore = 50; // 50% success rate for skipping
+        setFinalScore(skipScore);
+        wsManager.sendMessage({
+            type: 'finishOperation',
+            score: skipScore,
+            playerId: playerId
+        });
+    };
+
     const handleGameOver = (score: number) => {
         setFinalScore(score);
         setCurrentScreen('end');
@@ -346,7 +369,11 @@ export const OperationGame: React.FC<OperationGameProps> = ({ wsManager, playerI
 
     switch (currentScreen) {
         case 'intro':
-            return <IntroScreen playerName={playerName} onStart={handleStartGame} />;
+            return <IntroScreen
+                playerName={playerName}
+                onStart={handleStartGame}
+                onSkip={handleSkip}
+            />;
         case 'game':
             return <GameScreen playerName={playerName} onGameOver={handleGameOver} />;
         case 'end':

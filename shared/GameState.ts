@@ -24,14 +24,18 @@ export interface RoadDimensions {
     topY: number;
 }
 
-export interface GameStats {
-    restaurantsVisited: string[];  // Array of restaurant IDs
-    treatsCollected: number;
-    pedestriansHit: number;
-    potholesHit: number;
-}
+export const RESTAURANT_ADJECTIVES = [
+    'Hungry', 'Sleepy', 'Grumpy', 'Happy', 'Dizzy',
+    'Dancing', 'Flying', 'Rolling', 'Jumping', 'Spinning',
+    'Magical', 'Mysterious', 'Wobbly', 'Bouncy', 'Silly'
+];
 
-export type BuildingType = 'restaurant' | 'pokemon' | 'dogStore' | 'park' | 'house';
+export const RESTAURANT_TYPES = [
+    'Diner', 'Cafe', 'Bistro', 'Kitchen', 'Restaurant',
+    'Grill', 'Eatery', 'Joint', 'Place', 'Spot'
+];
+
+export type BuildingType = 'restaurant' | 'dogStore';
 
 export interface Building {
     id: string;
@@ -40,6 +44,7 @@ export interface Building {
     height: number;
     z: number;
     type: BuildingType;
+    name?: string;
 }
 
 export type PlayerLocation = 'bike' | 'operation-minigame';
@@ -66,13 +71,19 @@ export interface OperationMinigameEndState {
     score: number;
 }
 
+export interface GameStats {
+    restaurantsVisited: { id: string; name: string }[];
+    treatsCollected: number;
+    pedestriansHit: number;
+    potholesHit: number;
+}
 
 export interface GameState {
     bike: BikeState;
     road: RoadDimensions;
     buildings: Building[];
     roadObjects: RoadObject[];
-    stats: GameStats;  // Replace goals with stats
+    stats: GameStats;
     collidedBuildingIds: string[];
     collidedRoadObjectIds: string[];
     showDebugHitboxes: boolean;
@@ -135,17 +146,22 @@ function generateRandomId(prefix: string): string {
 
 export function spawnNewObjects(state: GameState): GameState {
     const newState = { ...state };
-    const spawnChance = 0.05;
+    const spawnChance = 0.02;
 
     if (Math.random() < spawnChance) {
         // Decide what to spawn
         const spawnType = Math.random();
 
         if (spawnType < 0.4) { // 40% chance for building
-            const types: BuildingType[] = ['restaurant', 'pokemon', 'dogStore', 'park', 'house'];
+            const types: BuildingType[] = ['restaurant', 'dogStore'];
             const type = types[Math.floor(Math.random() * types.length)];
             const side = Math.random() < 0.5 ? 'left' : 'right';
-            const width = 100 + Math.random() * 50;
+
+            // Make restaurants wider than dog stores
+            const width = type === 'restaurant'
+                ? 150 + Math.random() * 50  // 150-200 width for restaurants
+                : 100 + Math.random() * 50; // 100-150 width for dog stores
+
             const height = 180 + Math.random() * 70;
 
             const newBuilding: Building = {
@@ -154,7 +170,10 @@ export function spawnNewObjects(state: GameState): GameState {
                 width,
                 height,
                 z: state.road.length,
-                type
+                type,
+                name: type === 'restaurant'
+                    ? `The ${RESTAURANT_ADJECTIVES[Math.floor(Math.random() * RESTAURANT_ADJECTIVES.length)]} ${RESTAURANT_TYPES[Math.floor(Math.random() * RESTAURANT_TYPES.length)]}`
+                    : undefined
             };
 
             newState.buildings = [...state.buildings, newBuilding];
@@ -220,11 +239,23 @@ export function updateBuildings(gameState: GameState, deltaTime: number): GameSt
                 // Update stats based on building type
                 switch (building.type) {
                     case 'restaurant':
-                        if (!newStats.restaurantsVisited.includes(building.id)) {
-                            newStats.restaurantsVisited.push(building.id);
+                        newScore += 10
+                        // Check if we've already visited a restaurant with this name
+                        const isDuplicateName = newStats.restaurantsVisited.some(
+                            r => r.name === building.name
+                        );
+                        if (isDuplicateName) {
+                            newState.lives = Math.max(0, newState.lives - 1); // Lose a life for duplicate
+                        }
+                        if (!newStats.restaurantsVisited.some(r => r.id === building.id)) {
+                            newStats.restaurantsVisited.push({
+                                id: building.id,
+                                name: building.name || 'Restaurant'
+                            });
                         }
                         break;
                     case 'dogStore':
+                        newScore += 10
                         newStats.treatsCollected++;
                         break;
                 }
@@ -270,7 +301,7 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
 
                 if (object.type === 'pothole') {
                     newStats.potholesHit++;
-                    newHealth = Math.max(0, newHealth - healthLossPerHit);
+                    newState.lives = Math.max(0, newState.lives - 1); // Lose a life from pothole
                 } else if (object.type === 'pedestrian') {
                     newStats.pedestriansHit++;
                     const anyoneInOperation = newPlayers.some(p => p.location === 'operation-minigame');
@@ -367,12 +398,7 @@ export const createInitialGameState = (): GameState => ({
         length: 2000,
         topY: 100
     },
-    buildings: [
-        { id: 'building_0', side: 'left', width: 100, height: 200, z: 400, type: 'restaurant' },
-        { id: 'building_1', side: 'right', width: 150, height: 250, z: 800, type: 'pokemon' },
-        { id: 'building_2', side: 'left', width: 120, height: 180, z: 1200, type: 'dogStore' },
-        { id: 'building_3', side: 'right', width: 140, height: 220, z: 1600, type: 'park' }
-    ],
+    buildings: [],
     roadObjects: [
         { id: 'pothole_0', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.1, 0.2) },
         { id: 'pothole_1', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.3, 0.4) },
@@ -391,7 +417,7 @@ export const createInitialGameState = (): GameState => ({
     showDebugHitboxes: false,
     players: [],
     isGameStarted: false,
-    lives: 3,
+    lives: 5,
     health: 100,
     maxHealth: 100,
     score: 0,

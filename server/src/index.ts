@@ -24,6 +24,50 @@ const connections = new Map<string, { ws: any }>();
 let gameLoopInterval: NodeJS.Timeout | null = null;
 let lastUpdateTime = Date.now();
 
+// Add this function to handle game over
+function handleGameOver(state: GameState) {
+    console.log('Game over');
+    // Send final game state
+    const finalGameStateMessage: ServerMessage = {
+        type: 'gameState',
+        payload: {
+            ...state,
+            lastUpdateTime: Date.now()
+        }
+    };
+
+    // Send game ended message with final score
+    const gameEndedMessage: ServerMessage = {
+        type: 'gameEnded',
+        payload: { finalScore: state.score }
+    };
+
+    // Send both messages to all connections
+    connections.forEach((conn) => {
+        if (conn.ws) {
+            conn.ws.send(JSON.stringify(finalGameStateMessage));
+            conn.ws.send(JSON.stringify(gameEndedMessage));
+            // Close the connection
+            setTimeout(() => {
+                conn.ws.close();
+            }, 2000);
+        }
+    });
+
+    // Clear all connections
+    connections.clear();
+
+    // Stop game loop
+    if (gameLoopInterval) {
+        clearInterval(gameLoopInterval);
+        gameLoopInterval = null;
+    }
+
+    // Reset game state
+    gameState = createInitialGameState();
+}
+
+// Modify the updateGame function to check for game over condition
 function updateGame(state: GameState): GameState {
     const now = Date.now();
     const deltaTime = (now - lastUpdateTime) / 1000;
@@ -34,9 +78,11 @@ function updateGame(state: GameState): GameState {
     state = updateRoadObjects(state, deltaTime);
     state = spawnNewObjects(state);
 
+
     return state;
 }
 
+// Update the game loop to handle game over condition
 function startGameLoop() {
     console.log('Starting game loop...');
     if (gameLoopInterval) {
@@ -50,6 +96,12 @@ function startGameLoop() {
     gameLoopInterval = setInterval(() => {
         // Update game state
         gameState = updateGame(gameState);
+
+        // Check if game is over (lives <= 0)
+        if (gameState.lives <= 0) {
+            handleGameOver(gameState);
+            return;
+        }
 
         // Broadcast state every second
         if (Date.now() - lastBroadcastTime > 1000) {

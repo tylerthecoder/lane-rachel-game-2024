@@ -20,6 +20,7 @@ export class GameRenderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private buildingImageElements: Record<BuildingType, HTMLImageElement> = {} as Record<BuildingType, HTMLImageElement>;
+    private showDebugInfo: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -102,20 +103,80 @@ export class GameRenderer {
 
         // Draw the building
         const buildingImage = this.buildingImageElements[building.type];
+
+        // Check if restaurant is visited
+        const isVisitedRestaurant = building.type === 'restaurant' &&
+            state.stats.restaurantsVisited.some(r => r.id === building.id);
+
+        // Draw building with overlay if it's a visited restaurant
         if (buildingImage.complete) {
+            if (isVisitedRestaurant) {
+                // Draw a semi-transparent overlay first
+                this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';  // Green overlay
+                this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+
+                // Draw a checkmark
+                this.ctx.strokeStyle = '#4CAF50';
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                const checkX = coords.x + coords.width - 30;
+                const checkY = coords.y + 30;
+                this.ctx.moveTo(checkX - 15, checkY);
+                this.ctx.lineTo(checkX - 5, checkY + 10);
+                this.ctx.lineTo(checkX + 15, checkY - 10);
+                this.ctx.stroke();
+            }
             this.ctx.drawImage(buildingImage, coords.x, coords.y, coords.width, coords.height);
         } else {
             this.ctx.fillStyle = '#334455';
             this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+            if (isVisitedRestaurant) {
+                this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+                this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+            }
         }
 
         // Draw label
-        const label = building.type.charAt(0).toUpperCase() + building.type.slice(1);
-        const z = Math.round(building.z);
         this.ctx.font = '16px Arial';
         this.ctx.fillStyle = 'white';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText(`${label} (${z}m)`, coords.x + coords.width/2, coords.y - 10);
+
+        if (building.type === 'restaurant') {
+            // Draw restaurant name with visited indicator
+            const restaurantName = building.name || 'Restaurant';
+            const displayName = isVisitedRestaurant
+                ? `✓ ${restaurantName}`  // Add checkmark to visited restaurants
+                : restaurantName;
+
+            // Add shadow to make text more readable
+            this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            this.ctx.shadowBlur = 4;
+            this.ctx.shadowOffsetX = 2;
+            this.ctx.shadowOffsetY = 2;
+
+            this.ctx.fillText(
+                displayName,
+                coords.x + coords.width/2,
+                coords.y - 10
+            );
+
+            // Reset shadow
+            this.ctx.shadowColor = 'transparent';
+            this.ctx.shadowBlur = 0;
+            this.ctx.shadowOffsetX = 0;
+            this.ctx.shadowOffsetY = 0;
+        }
+
+        // Show debug info if enabled
+        if (this.showDebugInfo) {
+            const label = building.type.charAt(0).toUpperCase() + building.type.slice(1);
+            const z = Math.round(building.z);
+            this.ctx.fillText(
+                `${label} (${z}m)`,
+                coords.x + coords.width/2,
+                coords.y - 30
+            );
+        }
 
         // Draw building hitbox
         if (state.showDebugHitboxes) {
@@ -124,7 +185,7 @@ export class GameRenderer {
                 coords.y,
                 coords.width,
                 coords.height,
-                `${building.type} (${z}m)`
+                `${building.type} (${Math.round(building.z)}m)`
             );
         }
     }
@@ -294,15 +355,17 @@ export class GameRenderer {
             this.ctx.stroke();
         }
 
-        // Always draw coordinates for debugging
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '12px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText(
-            `${object.type} (${Math.round(object.z)}m)`,
-            coords.x + coords.width/2,
-            coords.y - 5
-        );
+        // Only show coordinates if debug info is enabled
+        if (this.showDebugInfo) {
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(
+                `${object.type} (${Math.round(object.z)}m)`,
+                coords.x + coords.width/2,
+                coords.y - 5
+            );
+        }
 
         // Draw hitbox if debug mode is on
         if (state.showDebugHitboxes) {
@@ -331,5 +394,9 @@ export class GameRenderer {
         this.drawRoadObjects(state);
         this.drawBuildings(state);
         this.drawBike(state);
+    }
+
+    public toggleDebugInfo() {
+        this.showDebugInfo = !this.showDebugInfo;
     }
 }
