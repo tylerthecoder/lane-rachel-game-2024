@@ -20,7 +20,9 @@ export class GameRenderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private buildingImageElements: Record<BuildingType, HTMLImageElement> = {} as Record<BuildingType, HTMLImageElement>;
-    private showDebugInfo: boolean = false;
+    private showDebugInfo: boolean = true;
+    private bikeImage: HTMLImageElement;
+    private isImageLoaded: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -28,6 +30,13 @@ export class GameRenderer {
         if (!ctx) throw new Error('Could not get canvas context');
         this.ctx = ctx;
         this.loadBuildingImages();
+
+        // Load bike image
+        this.bikeImage = new Image();
+        this.bikeImage.src = '/buildings/bike.png';
+        this.bikeImage.onload = () => {
+            this.isImageLoaded = true;
+        };
     }
 
     updateCanvas(canvas: HTMLCanvasElement) {
@@ -68,11 +77,9 @@ export class GameRenderer {
         state: GameState
     ): DrawingCoords {
         const roadData = this.getRoadDrawingDataForZ(z, state);
-        const progress = z / state.road.length;
-        const scale = 1 - progress * 0.6; // Scale from 1.0 to 0.4 based on z
 
-        const scaledWidth = width * scale;
-        const scaledHeight = height * scale;
+        const scaledWidth = width * (roadData.width / state.road.width);
+        const scaledHeight = height * (roadData.width / state.road.width);
 
         let drawX: number;
         if (x === 'left') {
@@ -176,10 +183,6 @@ export class GameRenderer {
                 coords.x + coords.width/2,
                 coords.y - 30
             );
-        }
-
-        // Draw building hitbox
-        if (state.showDebugHitboxes) {
             this.drawHitbox(
                 coords.x,
                 coords.y,
@@ -233,17 +236,16 @@ export class GameRenderer {
             state
         );
 
-        // Draw the bike
-        this.ctx.fillStyle = state.bike.isColliding ? '#0000ff' : '#ff0000';
-        this.ctx.fillRect(
-            coords.x,
-            coords.y,
-            coords.width,
-            coords.height
-        );
+        if (this.isImageLoaded) {
+            this.ctx.drawImage(this.bikeImage, coords.x, coords.y, coords.width, coords.height);
+        } else {
+            // Fallback to rectangle if image hasn't loaded
+            this.ctx.fillStyle = 'red';
+            this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+        }
 
         // Draw bike hitbox if debug mode is on
-        if (state.showDebugHitboxes) {
+        if (this.showDebugInfo) {
             this.drawHitbox(
                 coords.x,
                 coords.y,
@@ -251,16 +253,16 @@ export class GameRenderer {
                 coords.height,
                 `Bike`
             );
-        }
 
-        // Draw coordinates for debugging
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '12px Arial';
-        this.ctx.fillText(
-            `x: ${Math.round(state.bike.x)}, z: ${Math.round(state.bike.z)}`,
-            coords.x,
-            coords.y - 20
-        );
+            // Draw coordinates for debugging
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText(
+                `x: ${Math.round(state.bike.x)}, z: ${Math.round(state.bike.z)}`,
+                coords.x,
+                coords.y - 20
+            );
+        }
     }
 
     private drawHitbox(x: number, y: number, width: number, height: number, label?: string) {
@@ -365,10 +367,6 @@ export class GameRenderer {
                 coords.x + coords.width/2,
                 coords.y - 5
             );
-        }
-
-        // Draw hitbox if debug mode is on
-        if (state.showDebugHitboxes) {
             this.drawHitbox(
                 coords.x,
                 coords.y,

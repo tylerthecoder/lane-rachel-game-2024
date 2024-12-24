@@ -25,14 +25,12 @@ export interface RoadDimensions {
 }
 
 export const RESTAURANT_ADJECTIVES = [
-    'Hungry', 'Sleepy', 'Grumpy', 'Happy', 'Dizzy',
-    'Dancing', 'Flying', 'Rolling', 'Jumping', 'Spinning',
-    'Magical', 'Mysterious', 'Wobbly', 'Bouncy', 'Silly'
+    'Hungry', 'Sleepy', 'Happy',
+    'Dancing', 'Flying', 'Magical'
 ];
 
 export const RESTAURANT_TYPES = [
-    'Diner', 'Cafe', 'Bistro', 'Kitchen', 'Restaurant',
-    'Grill', 'Eatery', 'Joint', 'Place', 'Spot'
+    'Diner', 'Cafe', 'Bistro', 'Kitchen'
 ];
 
 export type BuildingType = 'restaurant' | 'dogStore';
@@ -94,6 +92,10 @@ export interface GameState {
     maxHealth: number;
     score: number;
     lastUpdateTime?: number;
+    message?: {
+        text: string;
+        timestamp: number;
+    };
 }
 
 export type ServerMessage =
@@ -182,8 +184,8 @@ export function spawnNewObjects(state: GameState): GameState {
                 id: generateRandomId('pothole'),
                 type: 'pothole',
                 x: getRandomRoadX(100),
-                width: 40,
-                height: 40,
+                width: 10,
+                height: 10,
                 z: state.road.length
             };
 
@@ -193,8 +195,8 @@ export function spawnNewObjects(state: GameState): GameState {
                 id: generateRandomId('pedestrian'),
                 type: 'pedestrian',
                 x: getRandomRoadX(100),
-                width: 30,
-                height: 60,
+                width: 20,
+                height: 40,
                 z: state.road.length
             };
 
@@ -224,14 +226,15 @@ export function updateBuildings(gameState: GameState, deltaTime: number): GameSt
     let newScore = gameState.score;
     const newCollidedBuildingIds = [...gameState.collidedBuildingIds];
     const newStats = { ...gameState.stats };
+    let message = gameState.message;
 
     newBuildings.forEach(building => {
         if (!newCollidedBuildingIds.includes(building.id)) {
             const tolerance = 20;
-            const isColliding =
-                Math.abs(bikeZ - building.z) < tolerance &&
-                ((building.side === 'left' && bikeX < 20) ||
-                 (building.side === 'right' && bikeX > 80));
+            const zOverlap = Math.abs(bikeZ - building.z) < (gameState.bike.height / 2 + building.height / 2 + tolerance);
+            const xCollision = building.side === 'left' ? bikeX < 20 : bikeX > 80;
+
+            const isColliding = zOverlap && xCollision;
 
             if (isColliding) {
                 newCollidedBuildingIds.push(building.id);
@@ -239,24 +242,37 @@ export function updateBuildings(gameState: GameState, deltaTime: number): GameSt
                 // Update stats based on building type
                 switch (building.type) {
                     case 'restaurant':
-                        newScore += 10
+                        newScore += 10;
                         // Check if we've already visited a restaurant with this name
                         const isDuplicateName = newStats.restaurantsVisited.some(
                             r => r.name === building.name
                         );
                         if (isDuplicateName) {
                             newState.lives = Math.max(0, newState.lives - 1); // Lose a life for duplicate
-                        }
-                        if (!newStats.restaurantsVisited.some(r => r.id === building.id)) {
-                            newStats.restaurantsVisited.push({
-                                id: building.id,
-                                name: building.name || 'Restaurant'
-                            });
+                            message = {
+                                text: `Went to same restaurant: ${building.name} (-1 life)`,
+                                timestamp: Date.now()
+                            };
+                        } else {
+                            message = {
+                                text: `Went to ${building.name} (+10 points)`,
+                                timestamp: Date.now()
+                            };
+                            if (!newStats.restaurantsVisited.some(r => r.id === building.id)) {
+                                newStats.restaurantsVisited.push({
+                                    id: building.id,
+                                    name: building.name || 'Restaurant'
+                                });
+                            }
                         }
                         break;
                     case 'dogStore':
-                        newScore += 10
+                        newScore += 10;
                         newStats.treatsCollected++;
+                        message = {
+                            text: `Got a treat (+10 points)`,
+                            timestamp: Date.now()
+                        };
                         break;
                 }
             }
@@ -268,7 +284,8 @@ export function updateBuildings(gameState: GameState, deltaTime: number): GameSt
         buildings: newBuildings,
         score: newScore,
         stats: newStats,
-        collidedBuildingIds: newCollidedBuildingIds
+        collidedBuildingIds: newCollidedBuildingIds,
+        message
     };
 }
 
@@ -286,15 +303,15 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
     let newHealth = gameState.health;
     const newCollidedRoadObjectIds = [...gameState.collidedRoadObjectIds];
     const newPlayers = [...gameState.players];
-    const healthLossPerHit = 20;
     const newStats = { ...gameState.stats };
 
     newRoadObjects.forEach(object => {
         if (!newCollidedRoadObjectIds.includes(object.id)) {
-            const tolerance = 20;
-            const isColliding =
-                Math.abs(bikeZ - object.z) < tolerance &&
-                Math.abs(bikeX - object.x) < tolerance;
+            // Calculate collision bounds
+
+            const xOverlap = Math.abs(bikeX - object.x) < (gameState.bike.width / 2 + object.width / 2);
+            const zOverlap = Math.abs(bikeZ - object.z) < (gameState.bike.height / 2 + object.height / 2);
+            const isColliding = zOverlap && xOverlap;
 
             if (isColliding) {
                 newCollidedRoadObjectIds.push(object.id);
@@ -302,9 +319,17 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
                 if (object.type === 'pothole') {
                     newStats.potholesHit++;
                     newState.lives = Math.max(0, newState.lives - 1); // Lose a life from pothole
+                    newState.message = {
+                        text: "Hit a pothole! (-1 life)",
+                        timestamp: Date.now()
+                    };
                 } else if (object.type === 'pedestrian') {
                     newStats.pedestriansHit++;
                     const anyoneInOperation = newPlayers.some(p => p.location === 'operation-minigame');
+                    newState.message = {
+                        text: "Hit a pedestrian! Time for surgery!",
+                        timestamp: Date.now()
+                    };
 
                     if (!anyoneInOperation) {
                         const bikePlayers = newPlayers.filter(p => p.location === 'bike');
@@ -332,6 +357,7 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
         stats: newStats
     };
 }
+
 export function updateBikePosition(gameState: GameState, deltaTime: number): GameState {
     // Calculate X movement based on press counts
     let newX = gameState.bike.x;
@@ -382,8 +408,8 @@ export const createInitialGameState = (): GameState => ({
     bike: {
         x: 50,
         z: 0,
-        width: 10,
-        height: 6,
+        width: 30,
+        height: 20,
         speed: 0,
         maxSpeed: 100,
         turnSpeed: 2,
@@ -399,13 +425,7 @@ export const createInitialGameState = (): GameState => ({
         topY: 100
     },
     buildings: [],
-    roadObjects: [
-        { id: 'pothole_0', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.1, 0.2) },
-        { id: 'pothole_1', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.3, 0.4) },
-        { id: 'pothole_2', type: 'pothole', x: getRandomRoadX(100), width: 40, height: 40, z: getRandomZ(2000, 0.5, 0.6) },
-        { id: 'pedestrian_0', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.7, 0.8) },
-        { id: 'pedestrian_1', type: 'pedestrian', x: getRandomRoadX(100), width: 30, height: 60, z: getRandomZ(2000, 0.9, 1.0) }
-    ],
+    roadObjects: [],
     stats: {
         restaurantsVisited: [],
         treatsCollected: 0,
@@ -438,7 +458,11 @@ export function finishOperationMinigame(gameState: GameState, playerId: string, 
     return {
         ...gameState,
         players: newPlayers,
-        score: gameState.score + endState.score
+        score: gameState.score + endState.score,
+        message: {
+            text: `Finished operation (+${endState.score} points)`,
+            timestamp: Date.now()
+        }
     };
 }
 
