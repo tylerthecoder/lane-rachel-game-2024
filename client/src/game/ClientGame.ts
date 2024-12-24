@@ -1,15 +1,12 @@
-import { GameState, updateBikePosition, updateBuildings, updateRoadObjects } from '@shared/GameState';
-import { WebSocketManager } from '../services/WebSocketManager';
+import { GameState, updateBikePosition, updateRoadObjects } from '@shared/GameState';
 
 export class ClientGame {
     private gameState: GameState;
-    private wsManager: WebSocketManager;
     private isStarted: boolean = false;
     private updateInterval: NodeJS.Timeout | null = null;
 
-    constructor(initialState: GameState, wsManager: WebSocketManager) {
+    constructor(initialState: GameState) {
         this.gameState = initialState;
-        this.wsManager = wsManager;
     }
 
     public updateGameState(newState: GameState) {
@@ -20,15 +17,19 @@ export class ClientGame {
         return this.gameState;
     }
 
-    private updateState(deltaTime: number) {
-        // Chain the update functions
-        this.gameState = updateRoadObjects(
-            updateBuildings(
-                updateBikePosition(this.gameState, deltaTime),
-                deltaTime
-            ),
-            deltaTime
-        );
+    private update(deltaTime: number) {
+        if (!this.gameState || !this.gameState.lastUpdateTime) return;
+
+        // Update game state
+        this.gameState = updateBikePosition(this.gameState, deltaTime);
+        this.gameState = updateRoadObjects(this.gameState, deltaTime);
+
+        // Update last update time
+        this.gameState = {
+            ...this.gameState,
+            lastUpdateTime: Date.now()
+        };
+
     }
 
     public start() {
@@ -37,7 +38,7 @@ export class ClientGame {
 
         // Update game state at 30fps
         this.updateInterval = setInterval(() => {
-            this.updateState(1/30); // Fixed time step
+            this.update(1/30); // Fixed time step
         }, 1000 / 30);
     }
 

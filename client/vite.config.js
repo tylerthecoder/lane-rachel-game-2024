@@ -11,5 +11,5 @@ export default defineConfig({
         alias: {
             '@shared': resolve(__dirname, '../shared')
         }
-    }
+    },
 });

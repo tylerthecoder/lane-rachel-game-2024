@@ -6,7 +6,6 @@ import {
     ServerMessage,
     createInitialGameState,
     updateBikePosition,
-    updateBuildings,
     updateRoadObjects,
     createNewPlayer,
     addPlayer,
@@ -74,10 +73,14 @@ function updateGame(state: GameState): GameState {
     lastUpdateTime = now;
 
     state = updateBikePosition(state, deltaTime);
-    state = updateBuildings(state, deltaTime);
     state = updateRoadObjects(state, deltaTime);
     state = spawnNewObjects(state);
 
+    // Update last update time
+    state = {
+        ...state,
+        lastUpdateTime: now
+    };
 
     return state;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { WebSocketManager } from '../services/WebSocketManager';
+import { TouchButton } from '../components/TouchButton';
 import './OperationGame.css';
 
 // Tetris piece shapes
@@ -32,7 +33,6 @@ interface GameState {
 const BOARD_WIDTH = 5;
 const BOARD_HEIGHT = 10;
 const CRITICAL_HEIGHT = 5;
-const CELL_SIZE = 40;
 const GAME_SPEED = 500;
 
 interface IntroScreenProps {
@@ -100,11 +100,45 @@ interface GameScreenProps {
 const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number | null>(null);
+    const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
     const [gameState, setGameState] = useState<GameState>({
         board: Array(BOARD_HEIGHT).fill(0).map(() => Array(BOARD_WIDTH).fill(0)),
         currentPiece: null,
         score: 0
     });
+
+    // Function to calculate canvas size based on window width
+    const calculateCanvasSize = () => {
+        const maxWidth = Math.min(window.innerWidth * 0.8, 1000); // 80% of screen width up to 1000px
+        const maxHeight = window.innerHeight * 0.7; // 70% of screen height
+        const cellSizeFromWidth = maxWidth / BOARD_WIDTH;
+        const cellSizeFromHeight = maxHeight / BOARD_HEIGHT;
+        const finalCellSize = Math.min(cellSizeFromWidth, cellSizeFromHeight);
+
+        setCanvasSize({
+            width: finalCellSize * BOARD_WIDTH,
+            height: finalCellSize * BOARD_HEIGHT
+        });
+    };
+
+    // Add resize listener
+    useEffect(() => {
+        calculateCanvasSize();
+        const handleResize = () => {
+            calculateCanvasSize();
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Update canvas size when dimensions change
+    useEffect(() => {
+        if (canvasRef.current) {
+            canvasRef.current.width = canvasSize.width;
+            canvasRef.current.height = canvasSize.height;
+        }
+    }, [canvasSize]);
 
     const createNewPiece = (): GamePiece => {
         const types = Object.keys(PIECES) as PieceType[];
@@ -159,23 +193,19 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         // Clear canvas
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-        // Calculate board position to center it
-        const boardPixelWidth = BOARD_WIDTH * CELL_SIZE;
-        const boardPixelHeight = BOARD_HEIGHT * CELL_SIZE;
-        const offsetX = (ctx.canvas.width - boardPixelWidth) / 2;
-        const offsetY = (ctx.canvas.height - boardPixelHeight) / 2;
+        const cellSize = canvasSize.width / BOARD_WIDTH;
 
         // Draw board background
         ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(offsetX, offsetY, boardPixelWidth, boardPixelHeight);
+        ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
 
         // Draw critical line
         ctx.strokeStyle = 'red';
         ctx.lineWidth = 2;
-        const criticalY = offsetY + (BOARD_HEIGHT - CRITICAL_HEIGHT) * CELL_SIZE;
+        const criticalY = (BOARD_HEIGHT - CRITICAL_HEIGHT) * cellSize;
         ctx.beginPath();
-        ctx.moveTo(offsetX, criticalY);
-        ctx.lineTo(offsetX + boardPixelWidth, criticalY);
+        ctx.moveTo(0, criticalY);
+        ctx.lineTo(canvasSize.width, criticalY);
         ctx.stroke();
 
         // Draw board pieces
@@ -184,10 +214,10 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
                 if (cell === 1) {
                     ctx.fillStyle = '#4CAF50';
                     ctx.fillRect(
-                        offsetX + x * CELL_SIZE,
-                        offsetY + (BOARD_HEIGHT - 1 - y) * CELL_SIZE,
-                        CELL_SIZE - 1,
-                        CELL_SIZE - 1
+                        x * cellSize,
+                        (BOARD_HEIGHT - 1 - y) * cellSize,
+                        cellSize - 1,
+                        cellSize - 1
                     );
                 }
             });
@@ -200,10 +230,10 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
                 row.forEach((cell, x) => {
                     if (cell === 1) {
                         ctx.fillRect(
-                            offsetX + (currentPiece.x + x) * CELL_SIZE,
-                            offsetY + (BOARD_HEIGHT - 1 - (currentPiece.y - y)) * CELL_SIZE,
-                            CELL_SIZE - 1,
-                            CELL_SIZE - 1
+                            (currentPiece.x + x) * cellSize,
+                            (BOARD_HEIGHT - 1 - (currentPiece.y - y)) * cellSize,
+                            cellSize - 1,
+                            cellSize - 1
                         );
                     }
                 });
@@ -318,13 +348,39 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         };
     }, [gameState]);
 
+    const handleLeftStart = () => {
+        movePiece(-1);
+    };
+
+    const handleRightStart = () => {
+        movePiece(1);
+    };
+
     return (
         <div className="game-container">
             <h1 className="game-title">Emergency Surgery</h1>
             <h2 className="game-subtitle">Playing as: {playerName}</h2>
-            <canvas
-                ref={canvasRef}
-                className="border-2 border-game-green rounded-lg"
+            <div className="relative flex items-center justify-center w-full">
+                <canvas
+                    ref={canvasRef}
+                    width={canvasSize.width}
+                    height={canvasSize.height}
+                    className="border-2 border-game-green rounded-lg bg-black/20"
+                    style={{
+                        width: canvasSize.width,
+                        height: canvasSize.height
+                    }}
+                />
+            </div>
+            <TouchButton
+                direction="left"
+                onTouchStart={handleLeftStart}
+                onTouchEnd={() => {}}
+            />
+            <TouchButton
+                direction="right"
+                onTouchStart={handleRightStart}
+                onTouchEnd={() => {}}
             />
         </div>
     );

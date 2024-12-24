@@ -1,5 +1,4 @@
-import { GameState, RoadObject, BuildingType, Building } from '@shared/GameState';
-import { buildingImages } from './BuildingTypes';
+import { GameState, RoadObject, RoadObjectType } from '@shared/GameState';
 
 interface RoadDrawingData {
     left: number;
@@ -16,11 +15,19 @@ interface DrawingCoords {
     height: number;
 }
 
+// Map object types to their image URLs
+const OBJECT_IMAGES: Partial<Record<RoadObjectType, string>> = {
+    restaurant: '/buildings/restraunt.png',
+    dogStore: '/buildings/pet-store.png',
+    dog: '/buildings/dog.webp',
+    pedestrian: '/buildings/pedestrian.png'
+};
+
 export class GameRenderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
-    private buildingImageElements: Record<BuildingType, HTMLImageElement> = {} as Record<BuildingType, HTMLImageElement>;
-    private showDebugInfo: boolean = true;
+    private objectImageElements: Partial<Record<RoadObjectType, HTMLImageElement>> = {};
+    private showDebugInfo: boolean = false;
     private bikeImage: HTMLImageElement;
     private isImageLoaded: boolean = false;
 
@@ -29,7 +36,19 @@ export class GameRenderer {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Could not get canvas context');
         this.ctx = ctx;
-        this.loadBuildingImages();
+
+        // Load all object images
+        Object.entries(OBJECT_IMAGES).forEach(([type, url]) => {
+            const img = new Image();
+            img.src = url;
+            this.objectImageElements[type as RoadObjectType] = img;
+            img.onload = () => {
+                this.isImageLoaded = true;
+            };
+            img.onerror = () => {
+                console.error(`Failed to load image for ${type}`);
+            };
+        });
 
         // Load bike image
         this.bikeImage = new Image();
@@ -44,14 +63,6 @@ export class GameRenderer {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Could not get canvas context');
         this.ctx = ctx;
-    }
-
-    private loadBuildingImages() {
-        Object.entries(buildingImages).forEach(([type, url]) => {
-            const img = new Image();
-            img.src = url;
-            this.buildingImageElements[type as BuildingType] = img;
-        });
     }
 
     private getRoadDrawingDataForZ(z: number, state: GameState): RoadDrawingData {
@@ -70,7 +81,7 @@ export class GameRenderer {
     }
 
     private getRoadDrawingCoords(
-        x: number | 'left' | 'right',
+        x: number,
         z: number,
         width: number,
         height: number,
@@ -81,15 +92,8 @@ export class GameRenderer {
         const scaledWidth = width * (roadData.width / state.road.width);
         const scaledHeight = height * (roadData.width / state.road.width);
 
-        let drawX: number;
-        if (x === 'left') {
-            drawX = roadData.left - scaledWidth;
-        } else if (x === 'right') {
-            drawX = roadData.right;
-        } else {
-            // Convert relative x position to screen position
-            drawX = roadData.left + (x * (roadData.width / state.road.width)) - scaledWidth / 2;
-        }
+        // Convert relative x position to screen position
+        const drawX = roadData.left + (x * (roadData.width / state.road.width)) - scaledWidth / 2;
 
         return {
             x: drawX,
@@ -99,105 +103,12 @@ export class GameRenderer {
         };
     }
 
-    private drawBuilding(building: Building, state: GameState) {
-        const coords = this.getRoadDrawingCoords(
-            building.side,
-            building.z,
-            building.width,
-            building.height,
-            state
-        );
+    private drawRoad(state: GameState) {
+        // Draw the main road surface
+        const fromRoad = this.getRoadDrawingDataForZ(0, state);
+        const toRoad = this.getRoadDrawingDataForZ(state.road.length, state);
 
-        // Draw the building
-        const buildingImage = this.buildingImageElements[building.type];
-
-        // Check if restaurant is visited
-        const isVisitedRestaurant = building.type === 'restaurant' &&
-            state.stats.restaurantsVisited.some(r => r.id === building.id);
-
-        // Draw building with overlay if it's a visited restaurant
-        if (buildingImage.complete) {
-            if (isVisitedRestaurant) {
-                // Draw a semi-transparent overlay first
-                this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';  // Green overlay
-                this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
-
-                // Draw a checkmark
-                this.ctx.strokeStyle = '#4CAF50';
-                this.ctx.lineWidth = 3;
-                this.ctx.beginPath();
-                const checkX = coords.x + coords.width - 30;
-                const checkY = coords.y + 30;
-                this.ctx.moveTo(checkX - 15, checkY);
-                this.ctx.lineTo(checkX - 5, checkY + 10);
-                this.ctx.lineTo(checkX + 15, checkY - 10);
-                this.ctx.stroke();
-            }
-            this.ctx.drawImage(buildingImage, coords.x, coords.y, coords.width, coords.height);
-        } else {
-            this.ctx.fillStyle = '#334455';
-            this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
-            if (isVisitedRestaurant) {
-                this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
-                this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
-            }
-        }
-
-        // Draw label
-        this.ctx.font = '16px Arial';
-        this.ctx.fillStyle = 'white';
-        this.ctx.textAlign = 'center';
-
-        if (building.type === 'restaurant') {
-            // Draw restaurant name with visited indicator
-            const restaurantName = building.name || 'Restaurant';
-            const displayName = isVisitedRestaurant
-                ? `✓ ${restaurantName}`  // Add checkmark to visited restaurants
-                : restaurantName;
-
-            // Add shadow to make text more readable
-            this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-            this.ctx.shadowBlur = 4;
-            this.ctx.shadowOffsetX = 2;
-            this.ctx.shadowOffsetY = 2;
-
-            this.ctx.fillText(
-                displayName,
-                coords.x + coords.width/2,
-                coords.y - 10
-            );
-
-            // Reset shadow
-            this.ctx.shadowColor = 'transparent';
-            this.ctx.shadowBlur = 0;
-            this.ctx.shadowOffsetX = 0;
-            this.ctx.shadowOffsetY = 0;
-        }
-
-        // Show debug info if enabled
-        if (this.showDebugInfo) {
-            const label = building.type.charAt(0).toUpperCase() + building.type.slice(1);
-            const z = Math.round(building.z);
-            this.ctx.fillText(
-                `${label} (${z}m)`,
-                coords.x + coords.width/2,
-                coords.y - 30
-            );
-            this.drawHitbox(
-                coords.x,
-                coords.y,
-                coords.width,
-                coords.height,
-                `${building.type} (${Math.round(building.z)}m)`
-            );
-        }
-    }
-
-    private drawRoadSegment(fromZ: number, toZ: number, state: GameState) {
-        const fromRoad = this.getRoadDrawingDataForZ(fromZ, state);
-        const toRoad = this.getRoadDrawingDataForZ(toZ, state);
-
-        // Draw road segment
+        // Draw road surface
         this.ctx.fillStyle = '#666666';
         this.ctx.beginPath();
         this.ctx.moveTo(fromRoad.left, fromRoad.y);
@@ -206,24 +117,55 @@ export class GameRenderer {
         this.ctx.lineTo(toRoad.left, toRoad.y);
         this.ctx.fill();
 
-        // Draw center line for this segment
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 5;
+        // Draw center line (continuous)
+        this.ctx.fillStyle = '#ffff00';
         this.ctx.beginPath();
-        this.ctx.moveTo(fromRoad.center, fromRoad.y);
-        this.ctx.lineTo(toRoad.center, toRoad.y);
-        this.ctx.stroke();
-    }
+        const centerLineWidth = 8; // Base width for center line
+        this.ctx.moveTo(fromRoad.center - centerLineWidth, fromRoad.y);
+        this.ctx.lineTo(fromRoad.center + centerLineWidth, fromRoad.y);
+        this.ctx.lineTo(toRoad.center + (centerLineWidth * 0.2), toRoad.y);
+        this.ctx.lineTo(toRoad.center - (centerLineWidth * 0.2), toRoad.y);
+        this.ctx.fill();
 
-    private drawRoad(state: GameState) {
-        // Draw road in segments for better visual quality
-        const segments = 10;
-        const segmentLength = state.road.length / segments;
+        // Draw side stripes
+        const stripeSpacing = 50;
+        const stripeLength = 30;
+        const offset = -state.road.distanceMoved % stripeSpacing;
+        const numStripes = Math.ceil(state.road.length / stripeSpacing) + 1;
 
-        for (let i = 0; i < segments; i++) {
-            const fromZ = i * segmentLength;
-            const toZ = (i + 1) * segmentLength;
-            this.drawRoadSegment(fromZ, toZ, state);
+        // Draw all stripes at once
+        this.ctx.fillStyle = '#ffffff'; // White color for side stripes
+        for (let i = 0; i < numStripes; i++) {
+            const stripeFromZ = (i * stripeSpacing) + offset;
+            const stripeToZ = stripeFromZ + stripeLength;
+
+            if (stripeFromZ > state.road.length || stripeToZ < 0) continue;
+
+            // Calculate scaling factors for start and end of stripe
+            const fromScale = 1 - (stripeFromZ / state.road.length);
+            const toScale = 1 - (stripeToZ / state.road.length);
+            const baseWidth = 8; // Base width for side stripes
+
+            const stripeFrom = this.getRoadDrawingDataForZ(stripeFromZ, state);
+            const stripeTo = this.getRoadDrawingDataForZ(stripeToZ, state);
+
+            // Draw left lane stripe
+            const leftOffset = (stripeFrom.width / 4);
+            this.ctx.beginPath();
+            this.ctx.moveTo(stripeFrom.left + leftOffset - (baseWidth * fromScale), stripeFrom.y);
+            this.ctx.lineTo(stripeFrom.left + leftOffset + (baseWidth * fromScale), stripeFrom.y);
+            this.ctx.lineTo(stripeTo.left + (stripeTo.width / 4) + (baseWidth * toScale), stripeTo.y);
+            this.ctx.lineTo(stripeTo.left + (stripeTo.width / 4) - (baseWidth * toScale), stripeTo.y);
+            this.ctx.fill();
+
+            // Draw right lane stripe
+            const rightOffset = (stripeFrom.width * 3 / 4);
+            this.ctx.beginPath();
+            this.ctx.moveTo(stripeFrom.left + rightOffset - (baseWidth * fromScale), stripeFrom.y);
+            this.ctx.lineTo(stripeFrom.left + rightOffset + (baseWidth * fromScale), stripeFrom.y);
+            this.ctx.lineTo(stripeTo.left + (stripeTo.width * 3 / 4) + (baseWidth * toScale), stripeTo.y);
+            this.ctx.lineTo(stripeTo.left + (stripeTo.width * 3 / 4) - (baseWidth * toScale), stripeTo.y);
+            this.ctx.fill();
         }
     }
 
@@ -289,12 +231,6 @@ export class GameRenderer {
         }
     }
 
-    private drawBuildings(state: GameState) {
-        // Sort buildings by z (furthest first)
-        const sortedBuildings = [...state.buildings].sort((a, b) => b.z - a.z);
-        sortedBuildings.forEach(building => this.drawBuilding(building, state));
-    }
-
     private drawRoadObject(object: RoadObject, state: GameState) {
         const coords = this.getRoadDrawingCoords(
             object.x,
@@ -304,8 +240,71 @@ export class GameRenderer {
             state
         );
 
+        // Get the image for this object type
+        const objectImage = this.objectImageElements[object.type];
+
         // Draw the road object based on type
-        if (object.type === 'pothole') {
+        if (object.type === 'restaurant' || object.type === 'dogStore') {
+            // Draw building
+            const isVisitedRestaurant = object.type === 'restaurant' &&
+                state.stats.restaurantsVisited.some(r => r.id === object.id);
+
+            if (objectImage?.complete) {
+                if (isVisitedRestaurant) {
+                    // Draw a semi-transparent overlay first
+                    this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';  // Green overlay
+                    this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+
+                    // Draw a checkmark
+                    this.ctx.strokeStyle = '#4CAF50';
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    const checkX = coords.x + coords.width - 30;
+                    const checkY = coords.y + 30;
+                    this.ctx.moveTo(checkX - 15, checkY);
+                    this.ctx.lineTo(checkX - 5, checkY + 10);
+                    this.ctx.lineTo(checkX + 15, checkY - 10);
+                    this.ctx.stroke();
+                }
+                this.ctx.drawImage(objectImage, coords.x, coords.y, coords.width, coords.height);
+            } else {
+                this.ctx.fillStyle = '#334455';
+                this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+                if (isVisitedRestaurant) {
+                    this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+                    this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+                }
+            }
+
+            // Draw label for restaurants
+            if (object.type === 'restaurant' && object.name) {
+                this.ctx.font = '16px Arial';
+                this.ctx.fillStyle = 'white';
+                this.ctx.textAlign = 'center';
+
+                const displayName = isVisitedRestaurant
+                    ? `✓ ${object.name}`
+                    : object.name;
+
+                // Add shadow to make text more readable
+                this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.shadowBlur = 4;
+                this.ctx.shadowOffsetX = 2;
+                this.ctx.shadowOffsetY = 2;
+
+                this.ctx.fillText(
+                    displayName,
+                    coords.x + coords.width/2,
+                    coords.y - 10
+                );
+
+                // Reset shadow
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
+                this.ctx.shadowOffsetX = 0;
+                this.ctx.shadowOffsetY = 0;
+            }
+        } else if (object.type === 'pothole') {
             // Draw pothole as a dark circle
             this.ctx.fillStyle = state.collidedRoadObjectIds.includes(object.id) ? '#ff0000' : '#333333';
             this.ctx.beginPath();
@@ -319,54 +318,47 @@ export class GameRenderer {
                 2 * Math.PI
             );
             this.ctx.fill();
-        } else if (object.type === 'pedestrian') {
-            // Draw pedestrian as a stick figure
-            this.ctx.strokeStyle = state.collidedRoadObjectIds.includes(object.id) ? '#ff0000' : '#000000';
-            this.ctx.lineWidth = 2;
+        } else if (object.type === 'pedestrian' || object.type === 'dog') {
+            if (objectImage?.complete) {
+                this.ctx.save();
+                if (state.collidedRoadObjectIds.includes(object.id)) {
+                    // Apply red tint for collided objects
+                    this.ctx.filter = 'sepia(1) saturate(10000%) hue-rotate(-50deg)';
+                }
 
-            // Head
-            const headRadius = coords.width / 3;
-            this.ctx.beginPath();
-            this.ctx.arc(
-                coords.x + coords.width / 2,
-                coords.y + headRadius,
-                headRadius,
-                0,
-                2 * Math.PI
-            );
-            this.ctx.stroke();
-
-            // Body
-            this.ctx.beginPath();
-            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + headRadius * 2);
-            this.ctx.lineTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
-            this.ctx.stroke();
-
-            // Arms
-            this.ctx.beginPath();
-            this.ctx.moveTo(coords.x, coords.y + coords.height / 2);
-            this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height / 2);
-            this.ctx.stroke();
-
-            // Legs
-            this.ctx.beginPath();
-            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
-            this.ctx.lineTo(coords.x, coords.y + coords.height);
-            this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
-            this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height);
-            this.ctx.stroke();
+                // Handle dog flipping
+                if (object.type === 'dog' && object.movementDirection === 'left') {
+                    this.ctx.scale(-1, 1);
+                    this.ctx.drawImage(
+                        objectImage,
+                        -coords.x - coords.width,
+                        coords.y,
+                        coords.width,
+                        coords.height
+                    );
+                } else {
+                    this.ctx.drawImage(
+                        objectImage,
+                        coords.x,
+                        coords.y,
+                        coords.width,
+                        coords.height
+                    );
+                }
+                this.ctx.restore();
+            } else {
+                // Fallback to simple shapes
+                if (object.type === 'pedestrian') {
+                    this.drawStickFigure(coords, state.collidedRoadObjectIds.includes(object.id));
+                } else {
+                    this.ctx.fillStyle = '#8B4513';
+                    this.ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+                }
+            }
         }
 
         // Only show coordinates if debug info is enabled
         if (this.showDebugInfo) {
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '12px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(
-                `${object.type} (${Math.round(object.z)}m)`,
-                coords.x + coords.width/2,
-                coords.y - 5
-            );
             this.drawHitbox(
                 coords.x,
                 coords.y,
@@ -377,10 +369,41 @@ export class GameRenderer {
         }
     }
 
-    private drawRoadObjects(state: GameState) {
-        // Sort road objects by z (furthest first)
-        const sortedObjects = [...state.roadObjects].sort((a, b) => b.z - a.z);
-        sortedObjects.forEach(object => this.drawRoadObject(object, state));
+    private drawStickFigure(coords: DrawingCoords, isCollided: boolean) {
+        this.ctx.strokeStyle = isCollided ? '#ff0000' : '#000000';
+        this.ctx.lineWidth = 2;
+
+        // Head
+        const headRadius = coords.width / 3;
+        this.ctx.beginPath();
+        this.ctx.arc(
+            coords.x + coords.width / 2,
+            coords.y + headRadius,
+            headRadius,
+            0,
+            2 * Math.PI
+        );
+        this.ctx.stroke();
+
+        // Body
+        this.ctx.beginPath();
+        this.ctx.moveTo(coords.x + coords.width / 2, coords.y + headRadius * 2);
+        this.ctx.lineTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+        this.ctx.stroke();
+
+        // Arms
+        this.ctx.beginPath();
+        this.ctx.moveTo(coords.x, coords.y + coords.height / 2);
+        this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height / 2);
+        this.ctx.stroke();
+
+        // Legs
+        this.ctx.beginPath();
+        this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+        this.ctx.lineTo(coords.x, coords.y + coords.height);
+        this.ctx.moveTo(coords.x + coords.width / 2, coords.y + coords.height - headRadius);
+        this.ctx.lineTo(coords.x + coords.width, coords.y + coords.height);
+        this.ctx.stroke();
     }
 
     public render(state: GameState) {
@@ -389,8 +412,11 @@ export class GameRenderer {
 
         // Draw game elements
         this.drawRoad(state);
-        this.drawRoadObjects(state);
-        this.drawBuildings(state);
+
+        // Sort road objects by z (furthest first)
+        const sortedObjects = [...state.roadObjects].sort((a, b) => b.z - a.z);
+        sortedObjects.forEach(object => this.drawRoadObject(object, state));
+
         this.drawBike(state);
     }
 
