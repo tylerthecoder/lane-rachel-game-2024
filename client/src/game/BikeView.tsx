@@ -12,76 +12,93 @@ interface StatsDisplayProps {
 }
 
 const StatsDisplay: React.FC<StatsDisplayProps> = ({ gameState, playerName, shouldScale }) => {
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const { stats, score, players, lives, level } = gameState;
     const distance = Math.floor(gameState.road.distanceMoved);
 
     return (
-        <div className="absolute top-5 left-5 bg-black/80 p-5 rounded-lg border-2 border-game-green text-white min-w-[300px] shadow-[0_0_20px_rgba(76,175,80,0.2)] font-game z-10"
+        <div className={`absolute top-5 left-5 bg-black/80 rounded-lg border-2 border-game-green text-white shadow-[0_0_20px_rgba(76,175,80,0.2)] font-game z-10 transition-all duration-300 ${isCollapsed ? 'w-[60px]' : 'min-w-[300px]'}`}
             style={{
                 transformOrigin: 'center',
                 transform: shouldScale ? 'scale(0.5) translate(-50%, -50%)' : 'none'
             }}
         >
-            <h2 className="text-xl mb-2.5 text-game-green drop-shadow-lg">Score: {score}</h2>
-            <div className="flex gap-1.5 justify-center my-2.5">
-                {[...Array(5)].map((_, i) => (
-                    <span key={i} className="text-2xl">
-                        {i < lives ? '❤️' : '🖤'}
-                    </span>
-                ))}
-            </div>
-            <p className="text-sm mb-4 opacity-80">Playing as: {playerName}</p>
-
-            <div className="space-y-2">
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">⭐</span>
-                    <span className="text-xs">
-                        Level: {level}
-                    </span>
-                </div>
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">🛣️</span>
-                    <span className="text-xs">
-                        Distance: {distance}m
-                    </span>
-                </div>
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">🍽️</span>
-                    <span className="text-xs">
-                        Restaurants: {stats.restaurantsVisited.length}
-                    </span>
-                </div>
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">🦴</span>
-                    <span className="text-xs">
-                        Treats: {stats.treatsCollected}
-                    </span>
-                </div>
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">🚶</span>
-                    <span className="text-xs">
-                        Pedestrians: {stats.pedestriansHit}
-                    </span>
-                </div>
-                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                    <span className="text-xl mr-2.5 min-w-[25px]">🕳️</span>
-                    <span className="text-xs">
-                        Potholes: {stats.potholesHit}
-                    </span>
-                </div>
+            <div className="flex items-center justify-between p-3 border-b-2 border-game-green/30">
+                <button
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    className="text-game-green hover:text-game-green/80 transition-all duration-200"
+                    aria-label={isCollapsed ? 'Expand Stats' : 'Collapse Stats'}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                {!isCollapsed && <h2 className="text-xl text-game-green drop-shadow-lg ml-2">Score: {score}</h2>}
             </div>
 
-            <div className="mt-5 pt-5 border-t-2 border-game-green/30">
-                <h3 className="text-base mb-4 text-game-green drop-shadow-lg">Active Players</h3>
-                {players.map(player => (
-                    <div key={player.id} className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
-                        <span className="text-xl mr-2.5">👤</span>
-                        <span className="text-xs">
-                            {player.name}
-                        </span>
+            {!isCollapsed && (
+                <div className="p-5">
+                    <div className="flex gap-1.5 justify-center my-2.5">
+                        {[...Array(5)].map((_, i) => (
+                            <span key={i} className="text-2xl">
+                                {i < lives ? '❤️' : '🖤'}
+                            </span>
+                        ))}
                     </div>
-                ))}
-            </div>
+                    <p className="text-sm mb-4 opacity-80">Playing as: {playerName}</p>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">⭐</span>
+                            <span className="text-xs">
+                                Level: {level}
+                            </span>
+                        </div>
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">🛣️</span>
+                            <span className="text-xs">
+                                Distance: {distance}m
+                            </span>
+                        </div>
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">🍽️</span>
+                            <span className="text-xs">
+                                Restaurants: {stats.restaurantsVisited.length}
+                            </span>
+                        </div>
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">🦴</span>
+                            <span className="text-xs">
+                                Treats: {stats.treatsCollected}
+                            </span>
+                        </div>
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">🚶</span>
+                            <span className="text-xs">
+                                Pedestrians: {stats.pedestriansHit}
+                            </span>
+                        </div>
+                        <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                            <span className="text-xl mr-2.5 min-w-[25px]">🕳️</span>
+                            <span className="text-xs">
+                                Potholes: {stats.potholesHit}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 pt-5 border-t-2 border-game-green/30">
+                        <h3 className="text-base mb-4 text-game-green drop-shadow-lg">Active Players</h3>
+                        {players.map(player => (
+                            <div key={player.id} className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                                <span className="text-xl mr-2.5">👤</span>
+                                <span className="text-xs">
+                                    {player.name}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

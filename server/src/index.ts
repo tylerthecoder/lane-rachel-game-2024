@@ -95,6 +95,7 @@ function startGameLoop() {
     }
 
     let lastBroadcastTime = Date.now();
+    lastUpdateTime = Date.now();
 
     // Start game loop at 30fps with broadcast
     gameLoopInterval = setInterval(() => {

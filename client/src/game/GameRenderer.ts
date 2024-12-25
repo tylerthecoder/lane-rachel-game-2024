@@ -261,27 +261,43 @@ export class GameRenderer {
 
             // Draw label for restaurants
             if (object.type === 'restaurant' && object.name) {
-                this.ctx.font = '16px Arial';
-                this.ctx.fillStyle = 'white';
+                const padding = 8;
+                const fontSize = Math.max(12, coords.width * 0.08);
+                this.ctx.font = `${fontSize}px 'Press Start 2P'`;
                 this.ctx.textAlign = 'center';
 
-                const displayName = isVisitedRestaurant
-                    ? `✓ ${object.name}`
-                    : object.name;
+                // Measure text for background
+                const textMetrics = this.ctx.measureText(object.name);
+                const textWidth = textMetrics.width;
+                const textHeight = fontSize;
 
-                // Add shadow to make text more readable
-                this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-                this.ctx.shadowBlur = 4;
-                this.ctx.shadowOffsetX = 2;
-                this.ctx.shadowOffsetY = 2;
+                // Draw background with fun color
+                this.ctx.fillStyle = '#4a154b'; // Deep purple background
+                const bgX = coords.x + (coords.width / 2) - (textWidth / 2) - padding;
+                const bgY = coords.y - textHeight - padding * 2;
+                const bgWidth = textWidth + padding * 2;
+                const bgHeight = textHeight + padding * 2;
 
+                // Draw background with rounded corners
+                this.ctx.beginPath();
+                this.ctx.roundRect(bgX, bgY, bgWidth, bgHeight, 8);
+                this.ctx.fill();
+
+                // Add a subtle glow effect
+                this.ctx.shadowColor = '#ff69b4';
+                this.ctx.shadowBlur = 10;
+                this.ctx.shadowOffsetX = 0;
+                this.ctx.shadowOffsetY = 0;
+
+                // Draw text
+                this.ctx.fillStyle = '#ffffff';
                 this.ctx.fillText(
-                    displayName,
+                    object.name,
                     coords.x + coords.width/2,
-                    coords.y - 10
+                    coords.y - padding
                 );
 
-                // Reset shadow
+                // Reset shadow effects
                 this.ctx.shadowColor = 'transparent';
                 this.ctx.shadowBlur = 0;
                 this.ctx.shadowOffsetX = 0;

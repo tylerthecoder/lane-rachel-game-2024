@@ -28,11 +28,12 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart }) => {
                 <h1 className="game-title">Loyde's Matching Game!</h1>
                 <h2 className="game-subtitle">Playing as: {playerName}</h2>
                 <div className="space-y-4 mb-8">
-                    <p className="game-text">Match the puppies to earn treats!</p>
+                    <p className="game-text">Match the buildings to earn points!</p>
                     <h3 className="text-game-green font-game mt-6 mb-4">How to Play:</h3>
                     <ul className="space-y-2">
                         <li className="game-text text-sm">Memorize the buildings</li>
                         <li className="game-text text-sm">Click two buildings to find matches</li>
+                        <li className="game-text text-sm">Each correct match earns you 10 points</li>
                         <li className="game-text text-sm">Match all buildings to win!</li>
                     </ul>
                 </div>
@@ -64,7 +65,7 @@ const EndScreen: React.FC<EndScreenProps> = ({ score, onContinue }) => {
 };
 
 const IMAGES = [
-    '/buildings/frank-1.jpg',
+    '/buildings/frank-1.webp',
     '/buildings/frank-2.jpg',
     '/buildings/frank-3.jpg',
     '/buildings/frank-4.jpg',
@@ -82,6 +83,36 @@ export const MatchingGame: React.FC<MatchingGameProps> = ({ wsManager, playerId,
     const [score, setScore] = useState<number>(0);
     const [showingInitial, setShowingInitial] = useState<boolean>(true);
     const [revealedCards, setRevealedCards] = useState<number[]>([]);
+    const [matchMessage, setMatchMessage] = useState<string>('');
+    const [imagesLoaded, setImagesLoaded] = useState<boolean>(false);
+    const [loadingMessage, setLoadingMessage] = useState<string>('Loading images...');
+
+    const preloadImages = () => {
+        let loadedCount = 0;
+        const totalImages = IMAGES.length;
+
+        return new Promise<void>((resolve) => {
+            IMAGES.forEach((src) => {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => {
+                    loadedCount++;
+                    setLoadingMessage(`Loading images... ${loadedCount}/${totalImages}`);
+                    if (loadedCount === totalImages) {
+                        setImagesLoaded(true);
+                        resolve();
+                    }
+                };
+                img.onerror = () => {
+                    loadedCount++;
+                    if (loadedCount === totalImages) {
+                        setImagesLoaded(true);
+                        resolve();
+                    }
+                };
+            });
+        });
+    };
 
     const initializeCards = () => {
         // Create pairs of cards
@@ -101,14 +132,19 @@ export const MatchingGame: React.FC<MatchingGameProps> = ({ wsManager, playerId,
         setCards(cardPairs);
     };
 
-    const handleStartGame = () => {
+    const handleStartGame = async () => {
         setCurrentScreen('game');
+        if (!imagesLoaded) {
+            await preloadImages();
+        }
         initializeCards();
-        // Hide cards after 3 seconds
+        setShowingInitial(true);
+
+        // Hide cards after 5 seconds
         setTimeout(() => {
             setShowingInitial(false);
             setCards(cards => cards.map(card => ({ ...card, isFlipped: false })));
-        }, 3000);
+        }, 5000);
     };
 
     const handleCardClick = (cardId: number) => {
@@ -135,42 +171,38 @@ export const MatchingGame: React.FC<MatchingGameProps> = ({ wsManager, playerId,
 
             if (firstCard?.imageUrl === secondCard?.imageUrl) {
                 // Match found
-                setTimeout(() => {
-                    setCards(cards => cards.map(card =>
-                        card.id === firstId || card.id === secondId
-                            ? { ...card, isMatched: true, isFlipped: true }
-                            : card
-                    ));
-                    setMatchedPairs(prev => prev + 1);
-                    setScore(prev => prev + 10);
-                    setFlippedCards([]);
-                }, 1000);
+                setCards(cards => cards.map(card =>
+                    card.id === firstId || card.id === secondId
+                        ? { ...card, isMatched: true, isFlipped: true }
+                        : card
+                ));
+                setMatchedPairs(prev => prev + 1);
+                setScore(prev => prev + 10);
+                setFlippedCards([]);
+                setMatchMessage('Match found! +10 points');
+                setTimeout(() => setMatchMessage(''), 1000);
             } else {
                 // No match, but keep cards revealed
-                setTimeout(() => {
-                    setCards(cards => cards.map(card =>
-                        card.id === firstId || card.id === secondId
-                            ? { ...card, isFlipped: true }
-                            : card
-                    ));
-                    setFlippedCards([]);
-                }, 1000);
+                setCards(cards => cards.map(card =>
+                    card.id === firstId || card.id === secondId
+                        ? { ...card, isFlipped: true }
+                        : card
+                ));
+                setFlippedCards([]);
+                setMatchMessage('No match. Try again!');
+                setTimeout(() => setMatchMessage(''), 1000);
             }
 
             // Check if all cards are revealed
             if (newRevealedCards.length === cards.length) {
-                setTimeout(() => {
-                    setCurrentScreen('end');
-                }, 1500);
+                setCurrentScreen('end');
             }
         }
     };
 
     useEffect(() => {
         if (matchedPairs === IMAGES.length) {
-            setTimeout(() => {
-                setCurrentScreen('end');
-            }, 1000);
+            setCurrentScreen('end');
         }
     }, [matchedPairs]);
 
@@ -188,10 +220,30 @@ export const MatchingGame: React.FC<MatchingGameProps> = ({ wsManager, playerId,
         case 'end':
             return <EndScreen score={score} onContinue={handleGameEnd} />;
         case 'game':
+            if (!imagesLoaded) {
+                return (
+                    <div className="game-container">
+                        <div className="game-panel text-center">
+                            <h1 className="game-title">Loading...</h1>
+                            <p className="game-text mb-8">{loadingMessage}</p>
+                        </div>
+                    </div>
+                );
+            }
             return (
                 <div className="game-container">
                     <h1 className="game-title">Match the Buildings!</h1>
                     <h2 className="game-subtitle">Score: {score}</h2>
+                    {showingInitial && (
+                        <div className="text-center mb-4 font-game text-game-green">
+                            Memorize the cards! They will flip in {Math.ceil(5)} seconds...
+                        </div>
+                    )}
+                    {matchMessage && !showingInitial && (
+                        <div className={`text-center mb-4 font-game ${matchMessage.includes('Match') ? 'text-game-green' : 'text-red-500'}`}>
+                            {matchMessage}
+                        </div>
+                    )}
                     <div className="flex justify-center w-full px-4">
                         <div
                             className="grid grid-cols-4 gap-4"

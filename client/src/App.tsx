@@ -7,8 +7,9 @@ import { ConnectionStatus } from './components/ConnectionStatus'
 import { WebSocketManager } from './services/WebSocketManager';
 import { Snowfall } from './components/Snowfall';
 import { MatchingGame } from './game/MatchingGame';
+import { OperationGame } from './game/OperationGame';
 
-type Screen = 'home' | 'connecting' | 'game' | 'end' | 'matching';
+type Screen = 'home' | 'connecting' | 'game' | 'end' | 'matching' | 'operation';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -27,6 +28,9 @@ function App() {
     const gameParam = params.get('game');
     if (gameParam === 'matching') {
       setScreen('matching');
+      setPlayerName('Debug Player');
+    } else if (gameParam === 'operation') {
+      setScreen('operation');
       setPlayerName('Debug Player');
     }
 
@@ -102,6 +106,14 @@ function App() {
       case 'matching':
         return (
           <MatchingGame
+            wsManager={wsManagerRef.current}
+            playerId="debug-player"
+            playerName={playerName}
+          />
+        );
+      case 'operation':
+        return (
+          <OperationGame
             wsManager={wsManagerRef.current}
             playerId="debug-player"
             playerName={playerName}

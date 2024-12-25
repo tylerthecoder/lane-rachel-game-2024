@@ -45,7 +45,7 @@ interface IntroScreenProps {
 const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart, onSkip }) => {
     return (
         <div className="game-container">
-            <div className="game-panel max-w-2xl mx-auto">
+            <div className="game-panel max-w-2xl mx-auto px-4 w-full">
                 <h1 className="game-title">Emergency Surgery!</h1>
                 <h2 className="game-subtitle">Playing as: {playerName}</h2>
                 <div className="space-y-4 mb-8">
@@ -58,12 +58,12 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ playerName, onStart, onSkip }
                         <li className="game-text text-sm">Don't let pieces stack above the red line!</li>
                     </ul>
                 </div>
-                <div className="flex gap-4 justify-center">
-                    <button className="game-button" onClick={onStart}>
+                <div className="flex flex-col gap-4 items-center">
+                    <button className="game-button w-full max-w-xs" onClick={onStart}>
                         Start Surgery
                     </button>
                     <button
-                        className="game-button !bg-gray-600 hover:!bg-gray-500"
+                        className="game-button w-full max-w-xs !bg-gray-600 hover:!bg-gray-500"
                         onClick={onSkip}
                     >
                         Skip Surgery (50% Success)
