@@ -11,7 +11,8 @@ import {
     addPlayer,
     removePlayer,
     finishOperationMinigame,
-    spawnNewObjects
+    spawnNewObjects,
+    finishMatchingMinigame
 } from '@shared/GameState';
 
 // Track game state
@@ -220,6 +221,17 @@ const app = new Elysia()
 
                         if (parsedMessage.playerId) {
                             gameState = finishOperationMinigame(gameState, parsedMessage.playerId, {
+                                score: parsedMessage.score
+                            });
+                            broadcastGameState();
+                        }
+                        break;
+
+                    case 'finishMatching':
+                        console.log('Finished matching minigame for player ID:', parsedMessage.playerId);
+
+                        if (parsedMessage.playerId) {
+                            gameState = finishMatchingMinigame(gameState, parsedMessage.playerId, {
                                 score: parsedMessage.score
                             });
                             broadcastGameState();

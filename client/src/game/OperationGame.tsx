@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { WebSocketManager } from '../services/WebSocketManager';
 import { TouchButton } from '../components/TouchButton';
-import './OperationGame.css';
 
 // Tetris piece shapes
 const PIECES = {

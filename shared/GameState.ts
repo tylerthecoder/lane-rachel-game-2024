@@ -30,7 +30,7 @@ export const RESTAURANT_TYPES = [
     'Diner', 'Cafe', 'Bistro', 'Kitchen'
 ];
 
-export type PlayerLocation = 'bike' | 'operation-minigame';
+export type PlayerLocation = 'bike' | 'operation-minigame' | 'matching-minigame';
 
 export interface Player {
     id: string;
@@ -104,7 +104,8 @@ export type ClientMessage =
     | { type: 'moveUp'; pressed: boolean }
     | { type: 'moveDown'; pressed: boolean }
     | { type: 'ready' }
-    | { type: 'finishOperation'; score: number, playerId: string };
+    | { type: 'finishOperation'; score: number, playerId: string }
+    | { type: 'finishMatching'; score: number, playerId: string };
 
 function generateRandomId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
@@ -186,7 +187,7 @@ export function spawnNewObjects(gameState: GameState): GameState {
         newRoadObjects.push({
             id: generateRandomId('dogStore'),
             type: 'dogStore',
-            x: isLeft ? -60 : 160,
+            x: isLeft ? -60 : 100,
             z: spawnZ,
             width: 60,
             height: 80
@@ -325,18 +326,7 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
                         updatedState = hitRestaurant(updatedState, obj);
                         break;
                     case 'dogStore':
-                        updatedState = {
-                            ...updatedState,
-                            score: updatedState.score + 10,
-                            stats: {
-                                ...updatedState.stats,
-                                treatsCollected: updatedState.stats.treatsCollected + 1
-                            },
-                            message: {
-                                text: 'Got a treat (+10 points)',
-                                timestamp: Date.now()
-                            }
-                        };
+                        updatedState = hitDogStore(updatedState);
                         break;
                     case 'dog':
                         updatedState = {
@@ -549,7 +539,6 @@ export function hitPedestrian(gameState: GameState): GameState {
                     ...gameState.stats,
                     pedestriansHit: gameState.stats.pedestriansHit + 1
                 },
-                lives: Math.max(0, gameState.lives - 1),
                 message: {
                     text: `Hit a pedestrian! ${selectedPlayer.name} must operate! (-1 life)`,
                     timestamp: Date.now()
@@ -608,6 +597,81 @@ export function hitRestaurant(gameState: GameState, restaurant: RoadObject): Gam
         },
         message: {
             text: `Went to ${restaurant.name} (+10 points) [${visitedCount}/${totalRestaurants} visited]`,
+            timestamp: Date.now()
+        }
+    };
+}
+
+export function hitDogStore(gameState: GameState): GameState {
+    // Only move a player to matching minigame if no one is already there
+    const someoneInMatching = gameState.players.some(p => p.location === 'matching-minigame');
+    if (!someoneInMatching && gameState.players.length > 0) {
+        // Get all players on bikes
+        const bikePlayers = gameState.players.filter(p => p.location === 'bike');
+        if (bikePlayers.length > 0) {
+            // Select random player to move to matching game
+            const randomIndex = Math.floor(Math.random() * bikePlayers.length);
+            const selectedPlayer = bikePlayers[randomIndex];
+
+            // Update the player's location
+            const newPlayers = gameState.players.map(p =>
+                p.id === selectedPlayer.id
+                    ? { ...p, location: 'matching-minigame' as PlayerLocation }
+                    : p
+            );
+
+            return {
+                ...gameState,
+                players: newPlayers,
+                score: gameState.score + 10,
+                stats: {
+                    ...gameState.stats,
+                    treatsCollected: gameState.stats.treatsCollected + 1
+                },
+                message: {
+                    text: `${selectedPlayer.name} entered Frank's! (+10 points)`,
+                    timestamp: Date.now()
+                }
+            };
+        }
+    }
+
+    // If no player was moved to matching game, just update stats and score
+    return {
+        ...gameState,
+        score: gameState.score + 10,
+        stats: {
+            ...gameState.stats,
+            treatsCollected: gameState.stats.treatsCollected + 1
+        },
+        message: {
+            text: `Saw Frank's! (+10 points)`,
+            timestamp: Date.now()
+        }
+    };
+}
+
+export interface MatchingMinigameEndState {
+    score: number;
+}
+
+export function finishMatchingMinigame(gameState: GameState, playerId: string, endState: MatchingMinigameEndState): GameState {
+    const newPlayers = gameState.players.map(player => {
+        if (player.id === playerId && player.location === 'matching-minigame') {
+            return {
+                ...player,
+                location: 'bike' as PlayerLocation
+            };
+        }
+        return player;
+    });
+
+    return {
+        ...gameState,
+        players: newPlayers,
+        score: gameState.score + endState.score,
+        message: {
+            text: `Finished matching game (+${endState.score} points)`,
             timestamp: Date.now()
         }
     };

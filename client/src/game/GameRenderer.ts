@@ -18,7 +18,7 @@ interface DrawingCoords {
 // Map object types to their image URLs
 const OBJECT_IMAGES: Partial<Record<RoadObjectType, string>> = {
     restaurant: '/buildings/restraunt.png',
-    dogStore: '/buildings/pet-store.png',
+    dogStore: '/buildings/frank.png',
     dog: '/buildings/dog.webp',
     pedestrian: '/buildings/pedestrian.png'
 };

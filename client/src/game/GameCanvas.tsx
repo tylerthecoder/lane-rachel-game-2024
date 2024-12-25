@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { WebSocketManager } from '../services/WebSocketManager';
 import { OperationGame } from './OperationGame';
 import { BikeView } from './BikeView';
+import { MatchingGame } from './MatchingGame';
 
 interface GameCanvasProps {
     wsManager: WebSocketManager;
@@ -91,8 +92,14 @@ export const GameCanvas = ({ wsManager, playerName }: GameCanvasProps) => {
                     playerName={playerName}
                     wsManager={wsManager}
                 />
-            ) : (
+            ) : currentLocation === 'operation-minigame' ? (
                 <OperationGame
+                    wsManager={wsManager}
+                    playerId={playerId}
+                    playerName={playerName}
+                />
+            ) : (
+                <MatchingGame
                     wsManager={wsManager}
                     playerId={playerId}
                     playerName={playerName}

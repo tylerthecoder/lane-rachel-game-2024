@@ -6,15 +6,30 @@ import { ConnectionScreen } from './components/ConnectionScreen'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { WebSocketManager } from './services/WebSocketManager';
 import { Snowfall } from './components/Snowfall';
+import { MatchingGame } from './game/MatchingGame';
 
-type Screen = 'home' | 'connecting' | 'game' | 'end';
+type Screen = 'home' | 'connecting' | 'game' | 'end' | 'matching';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerName, setPlayerName] = useState<string>('');
   const wsManagerRef = useRef<WebSocketManager>(WebSocketManager.getInstance());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
+    // Initialize audio
+    audioRef.current = new Audio('/Christmas In Harlem.mp3');
+    audioRef.current.loop = true;
+
+    // Check URL parameters for direct game access
+    const params = new URLSearchParams(window.location.search);
+    const gameParam = params.get('game');
+    if (gameParam === 'matching') {
+      setScreen('matching');
+      setPlayerName('Debug Player');
+    }
+
     // Connect WebSocket immediately when app loads
     wsManagerRef.current.connect();
 
@@ -37,7 +52,11 @@ function App() {
     return () => {
       unsubscribeGameStart();
       unsubscribeConnection();
-      // wsManager.disconnect();
+      // Stop audio when component unmounts
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
     };
   }, []);
 
@@ -57,14 +76,37 @@ function App() {
     wsManagerRef.current.connect();
   };
 
+  const toggleMusic = async () => {
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        await audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    } catch (error) {
+      console.log('Audio playback error:', error);
+    }
+  };
+
   const renderScreen = () => {
     switch (screen) {
       case 'home':
-        return <HomeScreen onStartGame={handleStartGame} />;
+        return <HomeScreen onStartGame={handleStartGame} onToggleMusic={toggleMusic} isMusicPlaying={isPlaying} />;
       case 'connecting':
         return <ConnectionScreen onStartGame={handleGameStart} />;
       case 'game':
         return <GameCanvas wsManager={wsManagerRef.current} playerName={playerName} />;
+      case 'matching':
+        return (
+          <MatchingGame
+            wsManager={wsManagerRef.current}
+            playerId="debug-player"
+            playerName={playerName}
+          />
+        );
       case 'end':
         return (
           <div className="end-screen">
