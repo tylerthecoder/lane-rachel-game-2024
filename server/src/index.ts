@@ -107,7 +107,7 @@ function startGameLoop() {
         }
 
         // Broadcast state every second
-        if (Date.now() - lastBroadcastTime > 1000) {
+        if (Date.now() - lastBroadcastTime > 500) {
             broadcastGameState();
             lastBroadcastTime = Date.now();
         }

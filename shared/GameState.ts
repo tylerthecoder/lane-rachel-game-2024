@@ -1,8 +1,3 @@
-interface RoadEdges {
-    left: number;
-    right: number;
-}
-
 export interface BikeState {
     x: number;
     z: number;
@@ -23,6 +18,7 @@ export interface RoadDimensions {
     readonly length: number;
     topY: number;
     distanceMoved: number;
+    lastDistance: number;
 }
 
 export const RESTAURANT_ADJECTIVES = [
@@ -53,7 +49,7 @@ export interface RoadObject {
     height: number;
     z: number;
     name?: string;
-    // Movement properties for the dog
+    // Movement properties for moving objects
     movementDirection?: 'left' | 'right' | 'none';
     movementTimeRemaining?: number;
     movementSpeed?: number;
@@ -84,10 +80,13 @@ export interface GameState {
     maxHealth: number;
     score: number;
     lastUpdateTime?: number;
+    distanceSinceLastSpawn: number;
     message?: {
         text: string;
         timestamp: number;
     };
+    speed: number;  // Game speed in units per second
+    level: number;  // Current game level (1-5)
 }
 
 export type ServerMessage =
@@ -107,30 +106,6 @@ export type ClientMessage =
     | { type: 'ready' }
     | { type: 'finishOperation'; score: number, playerId: string };
 
-
-function getRandomRoadX(roadWidth: number): number {
-    // Leave some margin on the edges (20% on each side)
-    const margin = roadWidth * 0.2;
-    return margin + Math.random() * (roadWidth - margin * 2);
-}
-
-export function getRoadWidthAtDistance(distance: number, roadLength: number): number {
-    const progress = distance / roadLength;
-    // Road gets narrower as it goes into the distance
-    // At distance 0, width is 400% of base road width
-    // At max distance, width is 20% of base road width
-    return 100 * (4 - progress * 3.8);
-}
-
-export function getRoadEdgesFromDistance(distance: number, roadLength: number, canvas: { width: number }): RoadEdges {
-    const width = getRoadWidthAtDistance(distance, roadLength);
-    const centerX = canvas.width / 2;
-    return {
-        left: centerX - width / 2,
-        right: centerX + width / 2
-    };
-}
-
 function generateRandomId(prefix: string): string {
     return `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
 }
@@ -138,35 +113,50 @@ function generateRandomId(prefix: string): string {
 export function spawnNewObjects(gameState: GameState): GameState {
     const newRoadObjects = [...gameState.roadObjects];
     const spawnZ = gameState.road.length;
+    let newDistanceSinceLastSpawn = gameState.distanceSinceLastSpawn;
+
+    // Spawn interval decreases as level increases
+    const spawnInterval = Math.max(5, 35 - (gameState.level * 5));
+
+    // Check if we've moved enough distance since last spawn
+    if (newDistanceSinceLastSpawn <= spawnInterval) {
+        return gameState;
+    }
+
+    // Increase spawn chances based on level
+    const levelMultiplier = 1 + (gameState.level - 1) * 0.2; // 20% increase per level
 
     // Random chance to spawn each type of object
-    if (Math.random() < 0.1) { // 10% chance for pothole
+    if (Math.random() < 0.1 * levelMultiplier) { // Pothole chance increases with level
         newRoadObjects.push({
-            id: Math.random().toString(36).substring(7),
+            id: generateRandomId('pothole'),
             type: 'pothole',
-            x: 20 + Math.random() * 60, // Random position on road
+            x: Math.random() * 100,
             z: spawnZ,
             width: 15,
             height: 15
         });
     }
 
-    if (Math.random() < 0.05) { // 5% chance for pedestrian
+    if (Math.random() < 0.05 * levelMultiplier) { // Pedestrian chance increases with level
+        const startOnLeft = Math.random() < 0.5;
         newRoadObjects.push({
-            id: Math.random().toString(36).substring(7),
+            id: generateRandomId('pedestrian'),
             type: 'pedestrian',
-            x: 20 + Math.random() * 60,
+            x: startOnLeft ? -20 : 120, // Start off-road
             z: spawnZ,
             width: 20,
-            height: 40
+            height: 40,
+            movementDirection: startOnLeft ? 'right' : 'left',
+            movementSpeed: 30 + Math.random() * 20 // Speed between 30-50 units per second
         });
     }
 
-    if (Math.random() < 0.02) { // 2% chance for dog
+    if (Math.random() < 0.02 * levelMultiplier) { // Dog chance increases with level
         newRoadObjects.push({
-            id: Math.random().toString(36).substring(7),
+            id: generateRandomId('dog'),
             type: 'dog',
-            x: 20 + Math.random() * 60,
+            x: Math.random() * 100,
             z: spawnZ,
             width: 25,
             height: 20,
@@ -176,14 +166,14 @@ export function spawnNewObjects(gameState: GameState): GameState {
         });
     }
 
-    if (Math.random() < 0.03) { // 3% chance for restaurant
+    if (Math.random() < 0.03) { // Restaurant chance stays constant
         const isLeft = Math.random() < 0.5;
         const adjective = RESTAURANT_ADJECTIVES[Math.floor(Math.random() * RESTAURANT_ADJECTIVES.length)];
         const type = RESTAURANT_TYPES[Math.floor(Math.random() * RESTAURANT_TYPES.length)];
         newRoadObjects.push({
-            id: Math.random().toString(36).substring(7),
+            id: generateRandomId('restaurant'),
             type: 'restaurant',
-            x: isLeft ? -60 : 100, // Spawn just outside the road
+            x: isLeft ? -60 : 100,
             z: spawnZ,
             width: 60,
             height: 80,
@@ -191,12 +181,12 @@ export function spawnNewObjects(gameState: GameState): GameState {
         });
     }
 
-    if (Math.random() < 0.02) { // 2% chance for dog store
+    if (Math.random() < 0.02) { // Dog store chance stays constant
         const isLeft = Math.random() < 0.5;
         newRoadObjects.push({
-            id: Math.random().toString(36).substring(7),
+            id: generateRandomId('dogStore'),
             type: 'dogStore',
-            x: isLeft ? -60 : 100, // Spawn just outside the road
+            x: isLeft ? -60 : 160,
             z: spawnZ,
             width: 60,
             height: 80
@@ -208,66 +198,93 @@ export function spawnNewObjects(gameState: GameState): GameState {
 
     return {
         ...gameState,
-        roadObjects: filteredObjects
+        roadObjects: filteredObjects,
+        distanceSinceLastSpawn: 0
     };
 }
 
 export function updateRoadObjects(gameState: GameState, deltaTime: number): GameState {
     const newState = { ...gameState };
-    let newScore = gameState.score;
-    let message = gameState.message;
 
-    // Update road distance and award points
-    const distanceIncrement = 2 * deltaTime * 30;
+    // Update road distance and award points based on game speed
+    const distanceIncrement = gameState.speed * deltaTime;
     const newDistanceMoved = gameState.road.distanceMoved + distanceIncrement;
-    const previousTens = Math.floor(gameState.road.distanceMoved / 10);
-    const newTens = Math.floor(newDistanceMoved / 10);
-    const scoreIncrement = newTens - previousTens; // Will be 1 if we crossed a 10-unit threshold
+    const lastTens = Math.floor(gameState.road.lastDistance / 100);
+    const newTens = Math.floor(newDistanceMoved / 100);
 
-    if (scoreIncrement > 0) {
-        newScore += scoreIncrement * 10;
-        message = {
-            text: `+${scoreIncrement * 10} points for distance!`,
-            timestamp: Date.now()
-        };
+    if (newTens > lastTens) {
+        newState.score += 10;
     }
 
+    // Check for level progression
+    const levelThresholds = [2000, 4000, 6000, 8000, 10000];
+    const currentLevel = gameState.level;
+    const newLevel = Math.min(5, levelThresholds.findIndex(threshold => newDistanceMoved < threshold) + 1);
+
+    if (newLevel > currentLevel) {
+        newState.level = newLevel;
+        newState.message = {
+            text: `Level ${newLevel}! Speed increased!`,
+            timestamp: Date.now()
+        };
+        newState.speed = 60 + (newLevel - 1) * 10; // Speed increases by 10 each level
+    }
+
+    // Update distance tracking
     newState.road = {
         ...gameState.road,
-        distanceMoved: newDistanceMoved
+        distanceMoved: newDistanceMoved,
+        lastDistance: newDistanceMoved
     };
+    newState.distanceSinceLastSpawn = gameState.distanceSinceLastSpawn + distanceIncrement;
 
     // Update road objects
     const newRoadObjects = gameState.roadObjects.map(obj => {
-        // Update positions
+        // Update positions based on game speed
         const speedScale = 1 + (1 - obj.z / gameState.road.length) * 2;
         let newX = obj.x;
-        let newZ = obj.z - (2 * speedScale * deltaTime * 30);
+        let newZ = obj.z - (speedScale * deltaTime * gameState.speed);
 
-        // Handle dog movement
-        if (obj.type === 'dog') {
+        // Handle moving objects (dogs and pedestrians)
+        if (obj.type === 'dog' || obj.type === 'pedestrian') {
             let newMovementDirection = obj.movementDirection || 'none';
             let newMovementTimeRemaining = obj.movementTimeRemaining || 0;
             let newMovementSpeed = obj.movementSpeed || 20;
 
-            if (newMovementTimeRemaining > 0) {
-                newMovementTimeRemaining -= deltaTime;
-            }
-
-            if (newMovementTimeRemaining <= 0) {
-                if (Math.random() < 0.3) {
-                    newMovementDirection = Math.random() < 0.5 ? 'left' : 'right';
-                    newMovementTimeRemaining = 0.5 + Math.random() * 1.5;
+            if (obj.type === 'pedestrian') {
+                // Pedestrians move continuously
+                if (newMovementDirection === 'left') {
+                    newX = obj.x - (newMovementSpeed * deltaTime);
+                    if (newX < -20) {
+                        newMovementDirection = 'right';
+                    }
                 } else {
-                    newMovementDirection = 'none';
-                    newMovementTimeRemaining = 0.2 + Math.random() * 0.3;
+                    newX = obj.x + (newMovementSpeed * deltaTime);
+                    if (newX > 120) {
+                        newMovementDirection = 'left';
+                    }
                 }
-            }
+            } else {
+                // Dog movement logic remains the same
+                if (newMovementTimeRemaining > 0) {
+                    newMovementTimeRemaining -= deltaTime;
+                }
 
-            if (newMovementDirection === 'left') {
-                newX = Math.max(10, obj.x - (newMovementSpeed * deltaTime));
-            } else if (newMovementDirection === 'right') {
-                newX = Math.min(90, obj.x + (newMovementSpeed * deltaTime));
+                if (newMovementTimeRemaining <= 0) {
+                    if (Math.random() < 0.3) {
+                        newMovementDirection = Math.random() < 0.5 ? 'left' : 'right';
+                        newMovementTimeRemaining = 0.5 + Math.random() * 1.5;
+                    } else {
+                        newMovementDirection = 'none';
+                        newMovementTimeRemaining = 0.2 + Math.random() * 0.3;
+                    }
+                }
+
+                if (newMovementDirection === 'left') {
+                    newX = Math.max(10, obj.x - (newMovementSpeed * deltaTime));
+                } else if (newMovementDirection === 'right') {
+                    newX = Math.min(90, obj.x + (newMovementSpeed * deltaTime));
+                }
             }
 
             return {
@@ -285,74 +302,67 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
 
     // Check for collisions
     const newCollidedRoadObjectIds = [...gameState.collidedRoadObjectIds];
-    const newStats = { ...gameState.stats };
+    let updatedState = newState;
 
-    newRoadObjects.forEach(obj => {
+    // Filter out hit objects and handle collisions
+    const activeRoadObjects = newRoadObjects.filter(obj => {
+        // Remove hit pedestrians, dogs, and potholes
+        if (newCollidedRoadObjectIds.includes(obj.id)) {
+            return obj.type === 'restaurant' || obj.type === 'dogStore'; // Keep only buildings
+        }
+        return true;
+    });
+
+    activeRoadObjects.forEach(obj => {
         if (!newCollidedRoadObjectIds.includes(obj.id)) {
-            const tolerance = obj.type === 'dog' ? 15 : 20;
-            const isColliding = doesBikeIntersectRoadObject(gameState.bike, obj, tolerance);
+            const isColliding = doesBikeIntersectRoadObject(gameState.bike, obj);
 
             if (isColliding) {
                 newCollidedRoadObjectIds.push(obj.id);
 
                 switch (obj.type) {
                     case 'restaurant':
-                        newScore += 10;
-                        const isDuplicateName = newStats.restaurantsVisited.some(
-                            r => r.name === obj.name
-                        );
-                        const totalRestaurants = newRoadObjects.filter(b => b.type === 'restaurant').length;
-                        const visitedCount = isDuplicateName ?
-                            newStats.restaurantsVisited.length :
-                            newStats.restaurantsVisited.length + 1;
-
-                        if (isDuplicateName) {
-                            newState.lives = Math.max(0, newState.lives - 1);
-                            message = {
-                                text: `Went to same restaurant: ${obj.name} (-1 life) [${visitedCount}/${totalRestaurants} visited]`,
-                                timestamp: Date.now()
-                            };
-                        } else {
-                            message = {
-                                text: `Went to ${obj.name} (+10 points) [${visitedCount}/${totalRestaurants} visited]`,
-                                timestamp: Date.now()
-                            };
-                            if (!newStats.restaurantsVisited.some(r => r.id === obj.id)) {
-                                newStats.restaurantsVisited.push({
-                                    id: obj.id,
-                                    name: obj.name || 'Restaurant'
-                                });
-                            }
-                        }
+                        updatedState = hitRestaurant(updatedState, obj);
                         break;
                     case 'dogStore':
-                        newScore += 10;
-                        newStats.treatsCollected++;
-                        message = {
-                            text: `Got a treat (+10 points)`,
-                            timestamp: Date.now()
+                        updatedState = {
+                            ...updatedState,
+                            score: updatedState.score + 10,
+                            stats: {
+                                ...updatedState.stats,
+                                treatsCollected: updatedState.stats.treatsCollected + 1
+                            },
+                            message: {
+                                text: 'Got a treat (+10 points)',
+                                timestamp: Date.now()
+                            }
                         };
                         break;
                     case 'dog':
-                        newScore += 10;
-                        message = {
-                            text: 'Found Luna (+10 points)',
-                            timestamp: Date.now()
+                        updatedState = {
+                            ...updatedState,
+                            score: updatedState.score + 10,
+                            message: {
+                                text: 'Found Luna (+10 points)',
+                                timestamp: Date.now()
+                            }
                         };
                         break;
                     case 'pedestrian':
-                        newStats.pedestriansHit++;
-                        newState.lives = Math.max(0, newState.lives - 1);
-                        message = {
-                            text: 'Hit a pedestrian! (-1 life)',
-                            timestamp: Date.now()
-                        };
+                        updatedState = hitPedestrian(updatedState);
                         break;
                     case 'pothole':
-                        newStats.potholesHit++;
-                        message = {
-                            text: 'Hit a pothole!',
-                            timestamp: Date.now()
+                        updatedState = {
+                            ...updatedState,
+                            stats: {
+                                ...updatedState.stats,
+                                potholesHit: updatedState.stats.potholesHit + 1
+                            },
+                            message: {
+                                text: 'Hit a pothole! (-1 life)',
+                                timestamp: Date.now()
+                            },
+                            lives: Math.max(0, updatedState.lives - 1)
                         };
                         break;
                 }
@@ -361,12 +371,10 @@ export function updateRoadObjects(gameState: GameState, deltaTime: number): Game
     });
 
     return {
-        ...newState,
-        roadObjects: newRoadObjects,
-        score: newScore,
-        stats: newStats,
-        collidedRoadObjectIds: newCollidedRoadObjectIds,
-        message
+        ...updatedState,
+        roadObjects: activeRoadObjects,
+        score: updatedState.score,
+        collidedRoadObjectIds: newCollidedRoadObjectIds
     };
 }
 
@@ -379,8 +387,8 @@ export function updateBikePosition(gameState: GameState, deltaTime: number): Gam
         const rightSpeed = gameState.bike.rightPressCount * baseSpeed * deltaTime * 30;
         const netMovement = rightSpeed - leftSpeed;
 
-        // Update x position relative to road width (0-100)
-        newX = Math.max(0, Math.min(100, newX + netMovement));
+        // Update x position allowing bike to move half its width off the road
+        newX = Math.max(-gameState.bike.width/2, Math.min(gameState.road.width - gameState.bike.width/2, newX + netMovement));
     }
 
     // Calculate forward/backward movement
@@ -421,8 +429,8 @@ export function createInitialGameState(): GameState {
         bike: {
             x: 50,
             z: 0,
-            width: 30,
-            height: 20,
+            width: 20,
+            height: 15,
             speed: 0,
             maxSpeed: 100,
             turnSpeed: 2,
@@ -436,7 +444,8 @@ export function createInitialGameState(): GameState {
             width: 100,
             length: 2000,
             topY: 100,
-            distanceMoved: 0
+            distanceMoved: 0,
+            lastDistance: 0
         },
         roadObjects: [],
         stats: {
@@ -453,7 +462,10 @@ export function createInitialGameState(): GameState {
         health: 100,
         maxHealth: 100,
         score: 0,
-        lastUpdateTime: Date.now()
+        lastUpdateTime: Date.now(),
+        distanceSinceLastSpawn: 0,
+        speed: 60,  // Default speed: 60 units per second
+        level: 1    // Start at level 1
     };
 }
 
@@ -502,17 +514,101 @@ export function createNewPlayer(name: string): Player {
     };
 }
 
-export function doesBikeIntersectRoadObject(bike: BikeState, obj: RoadObject, tolerance: number = 20): boolean {
-    const zOverlap = Math.abs(bike.z - obj.z) < (bike.height / 2 + obj.height / 2 + tolerance);
+export function doesBikeIntersectRoadObject(bike: BikeState, obj: RoadObject): boolean {
+    const bikeXCenter = bike.x + bike.width / 2;
+    const objXCenter = obj.x + obj.width / 2;
+    const bikeZCenter = bike.z + bike.height / 2;
+    const objZCenter = obj.z + obj.height / 2;
+    const zOverlap = Math.abs(bikeZCenter - objZCenter) < (bike.height / 2 + obj.height / 2);
+    const xOverlap = Math.abs(bikeXCenter - objXCenter) < (bike.width / 2 + obj.width / 2);
+    return zOverlap && xOverlap;
+}
 
-    if (obj.type === 'restaurant' || obj.type === 'dogStore') {
-        // Buildings use edge collision
-        const isLeftBuilding = obj.x < 50;
-        const xCollision = isLeftBuilding ? bike.x < 20 : bike.x > 80;
-        return zOverlap && xCollision;
-    } else {
-        // Road objects use center-based collision
-        const xOverlap = Math.abs(bike.x - obj.x) < (bike.width / 2 + obj.width / 2 + tolerance);
-        return zOverlap && xOverlap;
+export function hitPedestrian(gameState: GameState): GameState {
+    // Only move a player to operation minigame if no one is already there
+    const someoneInOperation = gameState.players.some(p => p.location === 'operation-minigame');
+    if (!someoneInOperation && gameState.players.length > 0) {
+        // Get all players on bikes
+        const bikePlayers = gameState.players.filter(p => p.location === 'bike');
+        if (bikePlayers.length > 0) {
+            // Select random player to move to operation
+            const randomIndex = Math.floor(Math.random() * bikePlayers.length);
+            const selectedPlayer = bikePlayers[randomIndex];
+
+            // Update the player's location
+            const newPlayers = gameState.players.map(p =>
+                p.id === selectedPlayer.id
+                    ? { ...p, location: 'operation-minigame' as PlayerLocation }
+                    : p
+            );
+
+            return {
+                ...gameState,
+                players: newPlayers,
+                stats: {
+                    ...gameState.stats,
+                    pedestriansHit: gameState.stats.pedestriansHit + 1
+                },
+                lives: Math.max(0, gameState.lives - 1),
+                message: {
+                    text: `Hit a pedestrian! ${selectedPlayer.name} must operate! (-1 life)`,
+                    timestamp: Date.now()
+                }
+            };
+        }
     }
+
+    // If no player was moved to operation, just update stats
+    return {
+        ...gameState,
+        stats: {
+            ...gameState.stats,
+            pedestriansHit: gameState.stats.pedestriansHit + 1
+        },
+        lives: Math.max(0, gameState.lives - 1),
+        message: {
+            text: 'Hit a pedestrian! (-1 life)',
+            timestamp: Date.now()
+        }
+    };
+}
+
+export function hitRestaurant(gameState: GameState, restaurant: RoadObject): GameState {
+    if (!restaurant.name) return gameState;
+
+    const isDuplicateName = gameState.stats.restaurantsVisited.some(
+        r => r.name === restaurant.name
+    );
+    const totalRestaurants = gameState.roadObjects.filter(b => b.type === 'restaurant').length;
+    const visitedCount = isDuplicateName ?
+        gameState.stats.restaurantsVisited.length :
+        gameState.stats.restaurantsVisited.length + 1;
+
+    if (isDuplicateName) {
+        return {
+            ...gameState,
+            lives: Math.max(0, gameState.lives - 1),
+            message: {
+                text: `Went to same restaurant: ${restaurant.name} (-1 life) [${visitedCount}/${totalRestaurants} visited]`,
+                timestamp: Date.now()
+            }
+        };
+    }
+
+    // New restaurant visit
+    return {
+        ...gameState,
+        score: gameState.score + 10,
+        stats: {
+            ...gameState.stats,
+            restaurantsVisited: [
+                ...gameState.stats.restaurantsVisited,
+                { id: restaurant.id, name: restaurant.name }
+            ]
+        },
+        message: {
+            text: `Went to ${restaurant.name} (+10 points) [${visitedCount}/${totalRestaurants} visited]`,
+            timestamp: Date.now()
+        }
+    };
 }

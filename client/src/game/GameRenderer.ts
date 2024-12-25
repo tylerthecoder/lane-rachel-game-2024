@@ -66,8 +66,11 @@ export class GameRenderer {
     }
 
     private getRoadDrawingDataForZ(z: number, state: GameState): RoadDrawingData {
-        const progress = z / state.road.length;
-        const width = state.road.width * (4 - progress * 3.8); // Same scaling as in GameState
+        const progress = (z / state.road.length);
+        // progress = ((progress / 2) ** 0.5) * 2
+        // progress = Math.tan(progress);
+
+        const width = state.road.width * (4 - progress * 3.8);
         const centerX = this.canvas.width / 2;
         const y = this.canvas.height - (progress * (this.canvas.height - state.road.topY));
 
@@ -93,7 +96,7 @@ export class GameRenderer {
         const scaledHeight = height * (roadData.width / state.road.width);
 
         // Convert relative x position to screen position
-        const drawX = roadData.left + (x * (roadData.width / state.road.width)) - scaledWidth / 2;
+        const drawX = roadData.left + (x * (roadData.width / state.road.width))
 
         return {
             x: drawX,
@@ -193,16 +196,7 @@ export class GameRenderer {
                 coords.y,
                 coords.width,
                 coords.height,
-                `Bike`
-            );
-
-            // Draw coordinates for debugging
-            this.ctx.fillStyle = 'white';
-            this.ctx.font = '12px Arial';
-            this.ctx.fillText(
-                `x: ${Math.round(state.bike.x)}, z: ${Math.round(state.bike.z)}`,
-                coords.x,
-                coords.y - 20
+                `Bike x: ${Math.round(state.bike.x)}, z: ${Math.round(state.bike.z)}`
             );
         }
     }
@@ -212,17 +206,6 @@ export class GameRenderer {
         this.ctx.strokeStyle = '#ff00ff';
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(x, y, width, height);
-
-        // Draw buffer zone with smaller buffer
-        const buffer = 5;
-        this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(
-            x - buffer,
-            y - buffer,
-            width + buffer * 2,
-            height + buffer * 2
-        );
 
         if (label) {
             this.ctx.fillStyle = '#ff00ff';

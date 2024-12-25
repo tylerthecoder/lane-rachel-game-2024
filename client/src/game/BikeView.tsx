@@ -12,7 +12,8 @@ interface StatsDisplayProps {
 }
 
 const StatsDisplay: React.FC<StatsDisplayProps> = ({ gameState, playerName, shouldScale }) => {
-    const { stats, score, players, lives } = gameState;
+    const { stats, score, players, lives, level } = gameState;
+    const distance = Math.floor(gameState.road.distanceMoved);
 
     return (
         <div className="absolute top-5 left-5 bg-black/80 p-5 rounded-lg border-2 border-game-green text-white min-w-[300px] shadow-[0_0_20px_rgba(76,175,80,0.2)] font-game z-10"
@@ -32,6 +33,18 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ gameState, playerName, shou
             <p className="text-sm mb-4 opacity-80">Playing as: {playerName}</p>
 
             <div className="space-y-2">
+                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                    <span className="text-xl mr-2.5 min-w-[25px]">⭐</span>
+                    <span className="text-xs">
+                        Level: {level}
+                    </span>
+                </div>
+                <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
+                    <span className="text-xl mr-2.5 min-w-[25px]">🛣️</span>
+                    <span className="text-xs">
+                        Distance: {distance}m
+                    </span>
+                </div>
                 <div className="flex items-center p-2 bg-game-green/10 rounded hover:translate-x-1 hover:bg-game-green/20 transition-all border border-game-green/30">
                     <span className="text-xl mr-2.5 min-w-[25px]">🍽️</span>
                     <span className="text-xs">

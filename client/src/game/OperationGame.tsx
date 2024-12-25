@@ -34,6 +34,8 @@ const BOARD_WIDTH = 5;
 const BOARD_HEIGHT = 10;
 const CRITICAL_HEIGHT = 5;
 const GAME_SPEED = 500;
+const SKIN_COLOR = '#FFB6A3';
+const ARM_WIDTH = 150; // increased from 100 to 150 pixels
 
 interface IntroScreenProps {
     playerName: string;
@@ -106,6 +108,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         currentPiece: null,
         score: 0
     });
+    const leftArmCanvasRef = useRef<HTMLCanvasElement>(null);
+    const rightArmCanvasRef = useRef<HTMLCanvasElement>(null);
 
     // Function to calculate canvas size based on window width
     const calculateCanvasSize = () => {
@@ -212,7 +216,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         board.forEach((row, y) => {
             row.forEach((cell, x) => {
                 if (cell === 1) {
-                    ctx.fillStyle = '#4CAF50';
+                    ctx.fillStyle = '#FFF';
                     ctx.fillRect(
                         x * cellSize,
                         (BOARD_HEIGHT - 1 - y) * cellSize,
@@ -225,7 +229,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
 
         // Draw current piece
         if (currentPiece) {
-            ctx.fillStyle = '#4CAF50';
+            ctx.fillStyle = '#FFF';
             currentPiece.shape.forEach((row, y) => {
                 row.forEach((cell, x) => {
                     if (cell === 1) {
@@ -328,12 +332,45 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         };
     }, []);
 
+    const drawArms = () => {
+        const leftCtx = leftArmCanvasRef.current?.getContext('2d');
+        const rightCtx = rightArmCanvasRef.current?.getContext('2d');
+
+        if (leftCtx && rightCtx) {
+            // Clear canvases
+            leftCtx.clearRect(0, 0, ARM_WIDTH, canvasSize.height);
+            rightCtx.clearRect(0, 0, ARM_WIDTH, canvasSize.height);
+
+            const armHeight = (CRITICAL_HEIGHT / BOARD_HEIGHT) * canvasSize.height;
+
+            // Draw left arm (solid rectangle)
+            leftCtx.fillStyle = SKIN_COLOR;
+            leftCtx.fillRect(0, canvasSize.height - armHeight, ARM_WIDTH, armHeight);
+
+            // Draw right hand
+            rightCtx.fillStyle = SKIN_COLOR;
+            // Palm
+            rightCtx.fillRect(0, canvasSize.height - armHeight, ARM_WIDTH * 0.8, armHeight);
+            // Fingers
+            const fingerSpacing = armHeight * 0.15;
+            for (let i = 0; i < 6; i++) {
+                rightCtx.fillRect(
+                    ARM_WIDTH * .8,
+                    canvasSize.height - i * fingerSpacing,
+                    100,
+                    armHeight * 0.1
+                );
+            }
+        }
+    };
+
     const renderLoop = () => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
 
         if (ctx) {
             draw(ctx);
+            drawArms();
         }
 
         animationFrameRef.current = requestAnimationFrame(renderLoop);
@@ -360,17 +397,36 @@ const GameScreen: React.FC<GameScreenProps> = ({ playerName, onGameOver }) => {
         <div className="game-container">
             <h1 className="game-title">Emergency Surgery</h1>
             <h2 className="game-subtitle">Playing as: {playerName}</h2>
-            <div className="relative flex items-center justify-center w-full">
-                <canvas
-                    ref={canvasRef}
-                    width={canvasSize.width}
-                    height={canvasSize.height}
-                    className="border-2 border-game-green rounded-lg bg-black/20"
-                    style={{
-                        width: canvasSize.width,
-                        height: canvasSize.height
-                    }}
-                />
+            <div className="border-2 border-game-green rounded-lg bg-black/20 p-2">
+                <div className="flex items-center justify-center gap-2">
+                    <canvas
+                        ref={leftArmCanvasRef}
+                        width={ARM_WIDTH}
+                        height={canvasSize.height}
+                        style={{
+                            width: ARM_WIDTH,
+                            height: canvasSize.height
+                        }}
+                    />
+                    <canvas
+                        ref={canvasRef}
+                        width={canvasSize.width}
+                        height={canvasSize.height}
+                        style={{
+                            width: canvasSize.width,
+                            height: canvasSize.height
+                        }}
+                    />
+                    <canvas
+                        ref={rightArmCanvasRef}
+                        width={ARM_WIDTH}
+                        height={canvasSize.height}
+                        style={{
+                            width: ARM_WIDTH * 2,
+                            height: canvasSize.height
+                        }}
+                    />
+                </div>
             </div>
             <TouchButton
                 direction="left"

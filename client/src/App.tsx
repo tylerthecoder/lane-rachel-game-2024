@@ -5,6 +5,7 @@ import { HomeScreen } from './components/HomeScreen'
 import { ConnectionScreen } from './components/ConnectionScreen'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { WebSocketManager } from './services/WebSocketManager';
+import { Snowfall } from './components/Snowfall';
 
 type Screen = 'home' | 'connecting' | 'game' | 'end';
 
@@ -79,6 +80,7 @@ function App() {
 
   return (
     <div className="App">
+      <Snowfall />
       <ConnectionStatus />
       {renderScreen()}
     </div>
